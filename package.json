@@ -1,0 +1,16 @@
+{
+  "name": "radio-to-text",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first meeting audio transcription desktop prototype",
+  "main": "app/desktop/main.js",
+  "scripts": {
+    "start": ".\\node_modules\\electron\\dist\\electron.exe .",
+    "smoke": "node app/desktop/scripts/smoke.js",
+    "sample": "node app/desktop/scripts/process-sample.js tools/sample-meeting.wav",
+    "engine:health": "python -X utf8 engine/python/main.py"
+  },
+  "devDependencies": {
+    "electron": "^37.2.6"
+  }
+}
