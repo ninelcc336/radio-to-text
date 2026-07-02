@@ -7,7 +7,6 @@ from typing import Any
 
 from .config import load_config
 from .models import EngineResponse
-from .pipeline import ProcessingPipeline
 from .task_store import TaskStore
 from .utils import format_timestamp, utc_now
 
@@ -41,9 +40,8 @@ def read_request() -> dict[str, Any]:
 
 
 def handle_request(request: dict[str, Any]) -> EngineResponse:
-    # CLI 入口本身只做动作分发，具体业务逻辑全部下沉到 pipeline/store。
+    # CLI 入口本身只做动作分发。轻量操作不要提前加载转写/分人依赖。
     config = load_config()
-    pipeline = ProcessingPipeline(config)
     store = TaskStore(config)
 
     action = request.get("action", "health")
@@ -83,6 +81,9 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
         )
 
     if action == "import_audio":
+        from .pipeline import ProcessingPipeline
+
+        pipeline = ProcessingPipeline(config)
         task = pipeline.import_audio(payload["sourcePath"])
         return build_response(
             ok=True,
@@ -92,6 +93,9 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
         )
 
     if action == "process_task":
+        from .pipeline import ProcessingPipeline
+
+        pipeline = ProcessingPipeline(config)
         task = pipeline.process_task(
             payload["taskId"], speaker_count=payload.get("speakerCount")
         )
@@ -103,6 +107,9 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
         )
 
     if action == "export_task":
+        from .pipeline import ProcessingPipeline
+
+        pipeline = ProcessingPipeline(config)
         task = pipeline.export_task(payload["taskId"], payload["format"])
         return build_response(
             ok=True,

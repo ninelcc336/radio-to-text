@@ -6,5 +6,8 @@ contextBridge.exposeInMainWorld("engineApi", {
   },
   selectAudioFile() {
     return ipcRenderer.invoke("dialog:select-audio");
+  },
+  saveTextFile(payload) {
+    return ipcRenderer.invoke("dialog:save-text", payload);
   }
 });

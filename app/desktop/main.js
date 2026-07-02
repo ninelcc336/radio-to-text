@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs/promises");
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { runEngineRequest } = require("./lib/python-engine");
 
@@ -52,6 +53,26 @@ app.whenReady().then(() => {
       ]
     });
     return result;
+  });
+
+  ipcMain.handle("dialog:save-text", async (_event, payload) => {
+    const saveResult = await dialog.showSaveDialog({
+      title: payload?.title || "保存文件",
+      defaultPath: payload?.defaultFileName || "transcript.txt",
+      filters: payload?.filters || [
+        {
+          name: "Text",
+          extensions: ["txt"]
+        }
+      ]
+    });
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return saveResult;
+    }
+
+    await fs.writeFile(saveResult.filePath, payload?.content || "", "utf8");
+    return saveResult;
   });
 
   createWindow();
