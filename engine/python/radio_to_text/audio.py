@@ -16,6 +16,7 @@ class AudioProcessor:
         self.config = config
 
     def copy_source(self, source_path: str, target_path: Path) -> Path:
+        # 保留原始录音副本，后续重跑模型时不需要依赖外部原文件路径。
         source = Path(source_path)
         if not source.exists():
             raise FileNotFoundError(f"Source audio not found: {source_path}")
@@ -23,6 +24,7 @@ class AudioProcessor:
         return target_path
 
     def normalize(self, source_path: Path, output_path: Path) -> Path:
+        # 无论原文件是什么格式，先统一成单声道 16kHz wav，再交给 ASR 和分人模块。
         ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
         output_path.parent.mkdir(parents=True, exist_ok=True)
         command = [
@@ -51,6 +53,7 @@ class AudioProcessor:
         return output_path
 
     def read_wav_metadata(self, wav_path: Path) -> dict[str, Any]:
+        # 元数据既用于页面展示，也用于后续判断长音频处理表现。
         with wave.open(str(wav_path), "rb") as wav_file:
             frames = wav_file.getnframes()
             sample_rate = wav_file.getframerate()

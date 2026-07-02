@@ -22,6 +22,7 @@ class SegmentDiarizer:
         transcript_segments: list[TranscriptSegment],
         speaker_count: int | None = None,
     ) -> list[SpeakerSegment]:
+        # 第一版先按转写分段提特征并聚类，做到完全本地可用闭环。
         audio, sample_rate = librosa.load(
             str(audio_path), sr=self.config.sample_rate, mono=True
         )
@@ -51,6 +52,7 @@ class SegmentDiarizer:
     def _segment_features(
         self, audio: np.ndarray, sample_rate: int, start: float, end: float
     ) -> np.ndarray:
+        # 用较轻量的声学特征描述每段声音，供后面的聚类估算说话人。
         start_idx = max(int(start * sample_rate), 0)
         end_idx = min(int(end * sample_rate), len(audio))
         chunk = audio[start_idx:end_idx]
@@ -83,6 +85,7 @@ class SegmentDiarizer:
         if len(features) == 1:
             return np.array([0])
 
+        # 先标准化特征，避免量纲不同导致聚类偏向某一类特征。
         scaled = StandardScaler().fit_transform(features)
         if speaker_count is None:
             speaker_count = self._estimate_speaker_count(scaled)
@@ -95,6 +98,7 @@ class SegmentDiarizer:
         return clustering.fit_predict(scaled)
 
     def _estimate_speaker_count(self, features: np.ndarray) -> int:
+        # 用 silhouette score 在合理范围内选一个说话人数，避免让用户手填。
         sample_count = len(features)
         upper = min(self.config.max_speakers, max(sample_count - 1, 1))
         if sample_count <= 2:
@@ -120,6 +124,7 @@ class SegmentDiarizer:
     def _merge_adjacent(
         self, segments: list[SpeakerSegment]
     ) -> list[SpeakerSegment]:
+        # 相邻同一说话人的片段直接合并，最终文本会更接近真实会议纪要。
         if not segments:
             return []
         merged = [segments[0]]

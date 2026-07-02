@@ -34,7 +34,7 @@
 
       .shell {
         display: grid;
-        grid-template-columns: 320px 1fr;
+        grid-template-columns: 380px 1fr;
         min-height: 100vh;
       }
 
@@ -79,6 +79,10 @@
         gap: 14px;
       }
 
+      .task-row {
+        position: relative;
+      }
+
       .actions {
         padding: 18px;
       }
@@ -110,6 +114,15 @@
         background: #dfd2bb;
       }
 
+      .danger {
+        background: #c95d3a;
+        color: white;
+      }
+
+      .danger:hover {
+        background: #a74628;
+      }
+
       .meta {
         padding: 18px;
         color: var(--muted);
@@ -122,8 +135,23 @@
       }
 
       .panel h2 {
-        margin-bottom: 16px;
         font-size: 18px;
+      }
+
+      .panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .summary {
+        display: grid;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
       }
 
       pre {
@@ -146,6 +174,107 @@
       .grid {
         display: grid;
         gap: 20px;
+      }
+
+      .task-item-button {
+        margin: 0;
+        text-align: left;
+        padding-right: 52px;
+      }
+
+      .task-item-button.is-active {
+        background: linear-gradient(135deg, #d3724f, #b74e2f);
+        color: white;
+        box-shadow: 0 12px 26px rgba(163, 70, 47, 0.22);
+      }
+
+      .task-item-button.is-active:hover {
+        background: linear-gradient(135deg, #c96545, #a74428);
+      }
+
+      .task-item-button.is-active .task-subtitle {
+        color: rgba(255, 255, 255, 0.82);
+      }
+
+      .task-name {
+        display: block;
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+
+      .task-name-edit {
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #fffaf1;
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 600;
+        outline: none;
+      }
+
+      .task-name-edit:focus {
+        border-color: #c78a6c;
+        box-shadow: 0 0 0 3px rgba(199, 138, 108, 0.14);
+      }
+
+      .task-subtitle {
+        display: block;
+        margin-top: 4px;
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      .task-delete-button {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        padding: 0;
+        margin: 0;
+        border-radius: 999px;
+        font-size: 13px;
+        line-height: 28px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 140ms ease, transform 140ms ease, background 140ms ease;
+        transform: scale(0.92);
+      }
+
+      .task-rename-button {
+        position: absolute;
+        top: 10px;
+        right: 44px;
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        padding: 0;
+        margin: 0;
+        border-radius: 999px;
+        font-size: 13px;
+        line-height: 28px;
+        background: #e7d9c3;
+        color: var(--ink);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 140ms ease, transform 140ms ease, background 140ms ease;
+        transform: scale(0.92);
+      }
+
+      .task-rename-button:hover {
+        background: #dccab0;
+      }
+
+      .task-row:hover .task-delete-button,
+      .task-row:hover .task-rename-button {
+        opacity: 1;
+        pointer-events: auto;
+        transform: scale(1);
       }
 
       @media (max-width: 900px) {
@@ -173,7 +302,9 @@
           <div>摘要与云端增强：暂未启用</div>
         </div>
         <div class="card panel">
-          <h2>任务列表</h2>
+          <div class="panel-header">
+            <h2>任务列表</h2>
+          </div>
           <div id="task-list" class="stack"></div>
         </div>
       </aside>
@@ -182,11 +313,16 @@
           <section class="card panel">
             <h2>运行状态</h2>
             <div id="status" class="status">等待操作</div>
-            <pre id="output">尚无返回结果。</pre>
           </section>
           <section class="card panel">
-            <h2>任务详情</h2>
-            <pre id="task-detail">尚未选择任务。</pre>
+            <h2>最终产物</h2>
+            <pre id="task-output">尚无转写结果。</pre>
+          </section>
+          <section class="card panel">
+            <div class="panel-header">
+              <h2>任务信息</h2>
+            </div>
+            <div id="task-detail" class="summary">尚未选择任务。</div>
           </section>
         </div>
       </main>

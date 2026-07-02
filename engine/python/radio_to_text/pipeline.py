@@ -11,10 +11,12 @@ from .diarize import SegmentDiarizer
 from .exporters import export_json, export_md, export_txt
 from .task_store import TaskStore
 from .transcribe import Transcriber
+from .utils import format_timestamp
 
 
 class ProcessingPipeline:
     def __init__(self, config: EngineConfig) -> None:
+        # pipeline 串起“导入 -> 预处理 -> 转写 -> 分人 -> 导出”整个主链路。
         self.config = config
         self.store = TaskStore(config)
         self.audio = AudioProcessor(config)
@@ -22,6 +24,7 @@ class ProcessingPipeline:
         self.diarizer = SegmentDiarizer(config)
 
     def import_audio(self, source_path: str) -> dict[str, Any]:
+        # 导入阶段只做建任务和复制原始文件，不做重计算。
         task = self.store.create_task(source_path)
         source = Path(source_path)
         source_copy = self.store.source_copy_path(task["task_id"], source.suffix.lower())
@@ -38,6 +41,7 @@ class ProcessingPipeline:
     def process_task(
         self, task_id: str, speaker_count: int | None = None
     ) -> dict[str, Any]:
+        # 从这里开始才进入真实处理流程，状态会持续写回 task.json。
         task = self.store.load_task(task_id)
         task["status"] = "processing"
         task["stage"] = "preprocessing"
@@ -75,7 +79,7 @@ class ProcessingPipeline:
         )
         task["results"]["speaker_segments"] = speaker_payload
         task["results"]["full_text"] = "\n".join(
-            f"[{item['start']:.2f}] 说话人 {item['speaker']}：{item['text']}"
+            f"[{format_timestamp(item['start'])}] 说话人 {item['speaker']}：{item['text']}"
             for item in speaker_payload
         )
         task["metadata"]["speaker_count"] = len(
@@ -97,6 +101,7 @@ class ProcessingPipeline:
         return task
 
     def export_task(self, task_id: str, fmt: str) -> dict[str, Any]:
+        # 导出始终基于 task.json 当前结果，避免页面状态和文件状态不一致。
         task = self.store.load_task(task_id)
         speaker_segments = task["results"].get("speaker_segments", [])
         if not speaker_segments:

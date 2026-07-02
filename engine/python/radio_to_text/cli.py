@@ -9,9 +9,10 @@ from .config import load_config
 from .models import EngineResponse
 from .pipeline import ProcessingPipeline
 from .task_store import TaskStore
-from .utils import utc_now
+from .utils import format_timestamp, utc_now
 
 
+# 所有动作都返回同一种响应结构，方便前端统一处理。
 def build_response(
     *,
     ok: bool,
@@ -40,6 +41,7 @@ def read_request() -> dict[str, Any]:
 
 
 def handle_request(request: dict[str, Any]) -> EngineResponse:
+    # CLI 入口本身只做动作分发，具体业务逻辑全部下沉到 pipeline/store。
     config = load_config()
     pipeline = ProcessingPipeline(config)
     store = TaskStore(config)
@@ -109,7 +111,27 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
             data={"task": task},
         )
 
+    if action == "delete_task":
+        task_id = payload["taskId"]
+        store.delete_task(task_id)
+        return build_response(
+            ok=True,
+            status="completed",
+            action=action,
+            data={"taskId": task_id},
+        )
+
+    if action == "rename_task":
+        task = store.rename_task(payload["taskId"], payload["name"])
+        return build_response(
+            ok=True,
+            status="completed",
+            action=action,
+            data={"task": task},
+        )
+
     if action == "create_mock_task":
+        # mock 任务只用于骨架联调，不走真实音频处理链路。
         task = store.create_task(payload.get("sourceFile", "mock-meeting.m4a"))
         store.append_log(task, "已创建模拟任务。")
         task["status"] = "completed"
@@ -129,7 +151,7 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
             },
         ]
         task["results"]["full_text"] = "\n".join(
-            f"[{item['start']:.2f}] 说话人 {item['speaker']}：{item['text']}"
+            f"[{format_timestamp(item['start'])}] 说话人 {item['speaker']}：{item['text']}"
             for item in task["results"]["speaker_segments"]
         )
         store.save_task(task)
@@ -156,6 +178,7 @@ def main() -> int:
         request = read_request()
         response = handle_request(request)
     except Exception as exc:
+        # 未捕获异常统一收敛成协议内错误，避免前端拿到半截输出。
         response = build_response(
             ok=False,
             status="failed",

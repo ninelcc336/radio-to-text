@@ -16,6 +16,7 @@ class Transcriber:
     @property
     def model(self) -> WhisperModel:
         if self._model is None:
+            # 模型懒加载，避免仅查看任务列表时也触发大模型初始化。
             self._model = WhisperModel(
                 self.config.model_name,
                 device=self.config.device,
@@ -24,6 +25,7 @@ class Transcriber:
         return self._model
 
     def transcribe(self, audio_path: Path) -> list[TranscriptSegment]:
+        # 这里先拿到“说了什么”和时间轴，暂时不在这一层处理“谁说的”。
         segments, _info = self.model.transcribe(
             str(audio_path),
             vad_filter=True,
