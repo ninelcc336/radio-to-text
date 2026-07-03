@@ -9,5 +9,8 @@ contextBridge.exposeInMainWorld("engineApi", {
   },
   saveTextFile(payload) {
     return ipcRenderer.invoke("dialog:save-text", payload);
+  },
+  resolveTaskAudioSource(payload) {
+    return ipcRenderer.invoke("media:resolve-task-audio", payload);
   }
 });

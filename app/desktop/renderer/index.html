@@ -138,10 +138,6 @@
         font-size: 18px;
       }
 
-      .status-panel h2 {
-        margin-bottom: 22px;
-      }
-
       .panel-header {
         display: flex;
         align-items: center;
@@ -156,15 +152,6 @@
         color: var(--muted);
         font-size: 14px;
         line-height: 1.6;
-      }
-
-      pre {
-        margin: 0;
-        white-space: pre-wrap;
-        word-break: break-word;
-        font-size: 13px;
-        line-height: 1.6;
-        font-family: Consolas, "Courier New", monospace;
       }
 
       .status {
@@ -326,9 +313,129 @@
         font-size: 13px;
       }
 
+      .player-shell {
+        display: grid;
+        gap: 16px;
+      }
+
+      .player-status {
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #f7f1e5;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .player-controls {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .player-controls button {
+        padding: 12px 14px;
+      }
+
+      .player-timeline {
+        display: grid;
+        gap: 8px;
+      }
+
+      .player-timebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .player-range {
+        width: 100%;
+        margin: 0;
+        accent-color: var(--accent);
+      }
+
+      .player-range:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .player-hint {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .transcript-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .transcript-plain {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 13px;
+        line-height: 1.7;
+        font-family: Consolas, "Courier New", monospace;
+        color: var(--ink);
+      }
+
+      .segment-button {
+        display: grid;
+        grid-template-columns: 92px 1fr;
+        align-items: start;
+        gap: 14px;
+        width: 100%;
+        padding: 14px 16px;
+        border: 1px solid #e6dbc9;
+        border-radius: 14px;
+        background: #fffaf2;
+        color: var(--ink);
+        text-align: left;
+        box-shadow: none;
+      }
+
+      .segment-button:hover {
+        background: #f6ebd8;
+      }
+
+      .segment-button.is-active {
+        border-color: rgba(163, 70, 47, 0.42);
+        background: linear-gradient(135deg, rgba(163, 70, 47, 0.16), rgba(163, 70, 47, 0.04));
+        box-shadow: inset 0 0 0 1px rgba(163, 70, 47, 0.08);
+      }
+
+      .segment-time {
+        color: var(--accent-strong);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .segment-text {
+        display: block;
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .empty-state {
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
       @media (max-width: 900px) {
         .shell {
           grid-template-columns: 1fr;
+        }
+
+        .segment-button {
+          grid-template-columns: 1fr;
+          gap: 8px;
         }
       }
     </style>
@@ -345,11 +452,6 @@
           <button id="process-button" class="secondary">处理当前任务</button>
           <button id="refresh-button" class="secondary">刷新任务列表</button>
         </div>
-        <div class="card meta">
-          <div>默认处理：本地预处理 + 本地转写 + 本地分人</div>
-          <div>当前版本：阶段 1-5 连续开发中</div>
-          <div>摘要与云端增强：暂未启用</div>
-        </div>
         <div class="card panel">
           <div class="panel-header">
             <h2>任务列表</h2>
@@ -359,26 +461,59 @@
       </aside>
       <main class="content">
         <div class="grid">
-          <section class="card panel status-panel">
-            <h2>运行状态</h2>
+          <section class="card panel">
+            <div class="panel-header">
+              <h2>任务信息</h2>
+            </div>
+            <div id="task-detail" class="summary">尚未选择任务。</div>
+          </section>
+          <section class="card panel">
+            <div class="panel-header">
+              <h2>运行状态</h2>
+            </div>
             <div id="status" class="status">等待操作</div>
           </section>
           <section class="card panel">
             <div class="panel-header">
-              <h2>最终产物</h2>
+              <h2>音频播放器</h2>
+            </div>
+            <div class="player-shell">
+              <div id="audio-status" class="player-status">尚未选择任务。</div>
+              <div class="player-controls">
+                <button id="seek-backward-button" class="secondary" type="button">-10s</button>
+                <button id="play-toggle-button" type="button">播放</button>
+                <button id="seek-forward-button" class="secondary" type="button">+10s</button>
+              </div>
+              <div class="player-timeline">
+                <div class="player-timebar">
+                  <span id="audio-current-time">00:00:00</span>
+                  <span id="audio-duration">00:00:00</span>
+                </div>
+                <input
+                  id="audio-progress"
+                  class="player-range"
+                  type="range"
+                  min="0"
+                  max="0"
+                  step="0.1"
+                  value="0"
+                  disabled
+                />
+                <div class="player-hint">支持拖动与点击进度条，适合边听边核对句子。</div>
+              </div>
+              <audio id="task-audio" preload="metadata"></audio>
+            </div>
+          </section>
+          <section class="card panel">
+            <div class="panel-header">
+              <h2>文本产物</h2>
               <div id="output-toolbar" class="toolbar is-hidden">
                 <button id="copy-output-button" class="secondary" type="button">复制文本</button>
                 <button id="save-output-button" class="secondary" type="button">下载 TXT</button>
                 <button id="save-md-button" class="secondary" type="button">下载 Markdown</button>
               </div>
             </div>
-            <pre id="task-output">尚无转写结果。</pre>
-          </section>
-          <section class="card panel">
-            <div class="panel-header">
-              <h2>任务信息</h2>
-            </div>
-            <div id="task-detail" class="summary">尚未选择任务。</div>
+            <div id="task-output" class="empty-state">尚无转写结果。</div>
           </section>
         </div>
       </main>

@@ -11,7 +11,7 @@ def export_txt(path: Path, content: str) -> None:
 
 
 def export_md(path: Path, segments: list[dict], task_id: str) -> None:
-    lines = [f"# 会议转写结果 - {task_id}", ""]
+    lines = [f"# 语音转写结果 - {task_id}", ""]
     for segment in segments:
         lines.append(f"- `{format_timestamp(segment['start'])}` {segment['text']}")
     path.write_text("\n".join(lines), encoding="utf-8")

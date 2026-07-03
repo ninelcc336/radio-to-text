@@ -1,7 +1,10 @@
 const path = require("path");
 const fs = require("fs/promises");
+const { pathToFileURL } = require("url");
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { runEngineRequest } = require("./lib/python-engine");
+
+const SUPPORTED_AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a"]);
 
 function isDevelopmentMode() {
   // 如果脚本显式传了 NODE_ENV，就优先按脚本意图判断。
@@ -33,6 +36,75 @@ function createWindow() {
   }
 
   window.loadFile(path.join(__dirname, "renderer", "index.html"));
+}
+
+function workspaceRoot() {
+  return path.resolve(__dirname, "../..");
+}
+
+function isPathInside(parentPath, childPath) {
+  const relative = path.relative(parentPath, childPath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+async function resolveTaskAudioSource(payload) {
+  const taskId = String(payload?.taskId || "").trim();
+  if (!taskId) {
+    return {
+      available: false,
+      reason: "未提供任务 ID。"
+    };
+  }
+
+  const tasksDir = path.join(workspaceRoot(), "tasks");
+  const taskDir = path.join(tasksDir, taskId);
+  const sourceDir = path.join(taskDir, "source");
+  const candidates = [];
+  const preferredPath = payload?.sourcePath ? path.resolve(payload.sourcePath) : null;
+
+  if (!isPathInside(tasksDir, taskDir)) {
+    return {
+      available: false,
+      reason: "任务目录不合法。"
+    };
+  }
+
+  if (preferredPath && isPathInside(taskDir, preferredPath)) {
+    candidates.push(preferredPath);
+  }
+
+  for (const extension of SUPPORTED_AUDIO_EXTENSIONS) {
+    candidates.push(path.join(sourceDir, `original${extension}`));
+  }
+
+  for (const candidate of [...new Set(candidates)]) {
+    const resolved = path.resolve(candidate);
+    const extension = path.extname(resolved).toLowerCase();
+    if (!SUPPORTED_AUDIO_EXTENSIONS.has(extension)) {
+      continue;
+    }
+    if (!isPathInside(taskDir, resolved)) {
+      continue;
+    }
+
+    try {
+      await fs.access(resolved);
+      return {
+        available: true,
+        path: resolved,
+        url: pathToFileURL(resolved).toString(),
+        extension,
+        fileName: path.basename(resolved)
+      };
+    } catch (_error) {
+      // 候选路径不存在时继续尝试下一个。
+    }
+  }
+
+  return {
+    available: false,
+    reason: "当前任务没有可播放音频。"
+  };
 }
 
 app.whenReady().then(() => {
@@ -73,6 +145,10 @@ app.whenReady().then(() => {
 
     await fs.writeFile(saveResult.filePath, payload?.content || "", "utf8");
     return saveResult;
+  });
+
+  ipcMain.handle("media:resolve-task-audio", async (_event, payload) => {
+    return resolveTaskAudioSource(payload);
   });
 
   createWindow();
