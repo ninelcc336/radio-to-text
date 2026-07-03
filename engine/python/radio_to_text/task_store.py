@@ -39,6 +39,8 @@ class TaskStore:
             "results": {
                 "segments": [],
                 "speaker_segments": [],
+                "plain_text": "",
+                "speaker_text": "",
                 "full_text": "",
             },
             "exports": {},

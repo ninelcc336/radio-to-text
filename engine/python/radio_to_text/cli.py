@@ -157,9 +157,21 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
                 "text": "当前目标是验证任务目录和协议是否打通。",
             },
         ]
-        task["results"]["full_text"] = "\n".join(
+        task["results"]["plain_text"] = "\n".join(
+            [
+                "[00:00:00] 这是阶段一生成的模拟会议片段。",
+                "[00:00:04] 当前目标是验证任务目录和协议是否打通。",
+            ]
+        )
+        task["results"]["speaker_text"] = "\n".join(
             f"[{format_timestamp(item['start'])}] 说话人 {item['speaker']}：{item['text']}"
             for item in task["results"]["speaker_segments"]
+        )
+        task["results"]["full_text"] = "\n".join(
+            [
+                "[00:00:00] 这是阶段一生成的模拟会议片段。",
+                "[00:00:04] 当前目标是验证任务目录和协议是否打通。",
+            ]
         )
         store.save_task(task)
         return build_response(

@@ -65,6 +65,10 @@ class ProcessingPipeline:
             encoding="utf-8",
         )
         task["results"]["segments"] = transcript_payload
+        task["results"]["plain_text"] = "\n".join(
+            f"[{format_timestamp(item['start'])}] {item['text']}" for item in transcript_payload
+        )
+        task["results"]["full_text"] = task["results"]["plain_text"]
         self.store.append_log(task, f"转写完成，共生成 {len(transcript_payload)} 段。")
 
         task["stage"] = "diarizing"
@@ -78,7 +82,7 @@ class ProcessingPipeline:
             encoding="utf-8",
         )
         task["results"]["speaker_segments"] = speaker_payload
-        task["results"]["full_text"] = "\n".join(
+        task["results"]["speaker_text"] = "\n".join(
             f"[{format_timestamp(item['start'])}] 说话人 {item['speaker']}：{item['text']}"
             for item in speaker_payload
         )
@@ -109,9 +113,9 @@ class ProcessingPipeline:
 
         export_path = self.store.export_path(task_id, fmt)
         if fmt == "txt":
-            export_txt(export_path, self._speaker_segments(speaker_segments))
+            export_txt(export_path, task["results"].get("plain_text", ""))
         elif fmt == "md":
-            export_md(export_path, self._speaker_segments(speaker_segments), task_id)
+            export_md(export_path, task["results"].get("segments", []), task_id)
         elif fmt == "json":
             export_json(export_path, task)
         else:
@@ -120,8 +124,3 @@ class ProcessingPipeline:
         task["exports"][fmt] = str(export_path)
         self.store.save_task(task)
         return task
-
-    def _speaker_segments(self, payload: list[dict[str, Any]]):
-        from .models import SpeakerSegment
-
-        return [SpeakerSegment(**item) for item in payload]

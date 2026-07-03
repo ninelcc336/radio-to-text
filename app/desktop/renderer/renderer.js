@@ -91,7 +91,6 @@ function renderTask(task) {
         ? `${metadata.duration_seconds.toFixed(1)} 秒`
         : "-"
     }`,
-    `说话人数：${metadata.speaker_count || "-"}`,
     `采样率：${metadata.sample_rate || "-"}`
   ];
 
@@ -99,7 +98,7 @@ function renderTask(task) {
     .map((line) => `<div>${line}</div>`)
     .join("");
 
-  const fullText = task.results?.full_text || "";
+  const fullText = task.results?.plain_text || task.results?.full_text || "";
   outputEl.textContent = fullText || "尚无转写结果。";
   outputToolbarEl.classList.toggle("is-hidden", !fullText.trim());
 }
@@ -360,7 +359,7 @@ refreshButton.addEventListener("click", refreshTasks);
 
 copyOutputButton.addEventListener("click", async () => {
   const task = currentTask();
-  const text = task?.results?.full_text?.trim();
+  const text = (task?.results?.plain_text || task?.results?.full_text || "").trim();
   if (!text) {
     setState("复制失败", { ok: false, error: "当前没有可复制的转写内容。" });
     return;
@@ -376,7 +375,7 @@ copyOutputButton.addEventListener("click", async () => {
 
 saveOutputButton.addEventListener("click", async () => {
   const task = currentTask();
-  const text = task?.results?.full_text?.trim();
+  const text = (task?.results?.plain_text || task?.results?.full_text || "").trim();
   if (!text) {
     setState("下载失败", { ok: false, error: "当前没有可导出的转写内容。" });
     return;
@@ -402,18 +401,8 @@ saveOutputButton.addEventListener("click", async () => {
 
 saveMdButton.addEventListener("click", async () => {
   const task = currentTask();
-  const markdownPath = task?.exports?.md;
-  if (!markdownPath) {
-    setState("下载失败", { ok: false, error: "当前没有可导出的 Markdown 内容。" });
-    return;
-  }
-
-  const mdTask = await window.engineApi.request({
-    action: "get_task",
-    payload: { taskId: task.task_id }
-  });
-  const speakerSegments = mdTask.data?.task?.results?.speaker_segments || [];
-  if (!speakerSegments.length) {
+  const segments = task?.results?.segments || [];
+  if (!segments.length) {
     setState("下载失败", { ok: false, error: "当前没有可导出的 Markdown 内容。" });
     return;
   }
@@ -421,10 +410,7 @@ saveMdButton.addEventListener("click", async () => {
   const markdown = [
     `# 会议转写结果 - ${task.name || task.task_id}`,
     "",
-    ...speakerSegments.map(
-      (segment) =>
-        `- \`${formatTimestamp(segment.start)}\` **说话人 ${segment.speaker}**：${segment.text}`
-    )
+    ...segments.map((segment) => `- \`${formatTimestamp(segment.start)}\` ${segment.text}`)
   ].join("\n");
 
   const result = await window.engineApi.saveTextFile({
