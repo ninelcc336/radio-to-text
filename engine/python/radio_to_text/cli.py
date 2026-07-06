@@ -60,7 +60,22 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
                 "tasks_dir": str(config.tasks_dir),
                 "logs_dir": str(config.logs_dir),
                 "model_cache_dir": str(config.model_cache_dir),
+                "term_replacements_path": str(config.term_replacements_path),
+                "audio_enhance_enabled": config.audio_enhance_enabled,
+                "loudness_normalization_enabled": config.loudness_normalization_enabled,
+                "target_lufs": config.target_lufs,
+                "silence_trim_enabled": config.silence_trim_enabled,
+                "silence_trim_min_duration": config.silence_trim_min_duration,
+                "silence_trim_keep_duration": config.silence_trim_keep_duration,
+                "silence_trim_threshold_db": config.silence_trim_threshold_db,
                 "model_name": config.model_name,
+                "accuracy_profile": config.accuracy_profile,
+                "beam_size": config.beam_size,
+                "vad_filter": config.vad_filter,
+                "language": config.language,
+                "initial_prompt": config.initial_prompt,
+                "chunk_seconds": config.chunk_seconds,
+                "chunk_overlap_seconds": config.chunk_overlap_seconds,
                 "sample_rate": config.sample_rate,
                 "timestamp": utc_now(),
             },
@@ -146,7 +161,32 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
         store.append_log(task, "已创建模拟任务。")
         task["status"] = "completed"
         task["stage"] = "skeleton"
-        task["results"]["speaker_segments"] = [
+        task["results"]["raw_segments"] = [
+            {
+                "start": 0.0,
+                "end": 4.2,
+                "text": "这是阶段一生成的模拟会议片段。",
+                "confidence": None,
+                "avg_logprob": None,
+                "no_speech_prob": None,
+                "source_chunk_id": None,
+                "needs_review": False,
+                "review_reasons": [],
+            },
+            {
+                "start": 4.2,
+                "end": 8.4,
+                "text": "当前目标是验证任务目录和协议是否打通。",
+                "confidence": None,
+                "avg_logprob": None,
+                "no_speech_prob": None,
+                "source_chunk_id": None,
+                "needs_review": False,
+                "review_reasons": [],
+            },
+        ]
+        task["results"]["segments"] = list(task["results"]["raw_segments"])
+        task["results"]["raw_speaker_segments"] = [
             {
                 "start": 0.0,
                 "end": 4.2,
@@ -160,11 +200,17 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
                 "text": "当前目标是验证任务目录和协议是否打通。",
             },
         ]
+        task["results"]["speaker_segments"] = list(task["results"]["raw_speaker_segments"])
         task["results"]["plain_text"] = "\n".join(
             [
                 "[00:00:00] 这是阶段一生成的模拟会议片段。",
                 "[00:00:04] 当前目标是验证任务目录和协议是否打通。",
             ]
+        )
+        task["results"]["raw_plain_text"] = task["results"]["plain_text"]
+        task["results"]["raw_speaker_text"] = "\n".join(
+            f"[{format_timestamp(item['start'])}] 说话人 {item['speaker']}：{item['text']}"
+            for item in task["results"]["raw_speaker_segments"]
         )
         task["results"]["speaker_text"] = "\n".join(
             f"[{format_timestamp(item['start'])}] 说话人 {item['speaker']}：{item['text']}"

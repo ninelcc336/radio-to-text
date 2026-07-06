@@ -2,6 +2,7 @@ const statusEl = document.getElementById("status");
 const detailEl = document.getElementById("task-detail");
 const outputEl = document.getElementById("task-output");
 const outputToolbarEl = document.getElementById("output-toolbar");
+const reviewToolbarEl = document.getElementById("review-toolbar");
 const taskListEl = document.getElementById("task-list");
 const selectButton = document.getElementById("select-button");
 const processButton = document.getElementById("process-button");
@@ -9,6 +10,13 @@ const refreshButton = document.getElementById("refresh-button");
 const copyOutputButton = document.getElementById("copy-output-button");
 const saveOutputButton = document.getElementById("save-output-button");
 const saveMdButton = document.getElementById("save-md-button");
+const viewCleanButton = document.getElementById("view-clean-button");
+const viewRawButton = document.getElementById("view-raw-button");
+const filterAllButton = document.getElementById("filter-all-button");
+const filterReviewButton = document.getElementById("filter-review-button");
+const reviewCountEl = document.getElementById("review-count");
+const reviewPrevButton = document.getElementById("review-prev-button");
+const reviewNextButton = document.getElementById("review-next-button");
 const audioStatusEl = document.getElementById("audio-status");
 const playToggleButton = document.getElementById("play-toggle-button");
 const seekBackwardButton = document.getElementById("seek-backward-button");
@@ -22,6 +30,13 @@ let selectedTaskId = null;
 let editingTaskId = null;
 let tasksCache = [];
 let audioLoadToken = 0;
+
+const transcriptViewState = {
+  taskId: null,
+  textVersion: "clean",
+  reviewFilter: "all",
+  activeReviewCursor: -1
+};
 
 const playerState = {
   taskId: null,
@@ -75,6 +90,24 @@ function currentTask() {
   return tasksCache.find((task) => task.task_id === selectedTaskId) || null;
 }
 
+function resetTranscriptViewState(taskId = null) {
+  transcriptViewState.taskId = taskId;
+  transcriptViewState.textVersion = "clean";
+  transcriptViewState.reviewFilter = "all";
+  transcriptViewState.activeReviewCursor = -1;
+}
+
+function ensureTranscriptViewState(task) {
+  const taskId = task?.task_id || null;
+  if (transcriptViewState.taskId !== taskId) {
+    resetTranscriptViewState(taskId);
+  }
+}
+
+function setTranscriptViewState(nextState) {
+  Object.assign(transcriptViewState, nextState);
+}
+
 async function syncTaskDetailFromCache() {
   if (!selectedTaskId) {
     await syncTaskView(null);
@@ -92,8 +125,11 @@ async function syncTaskView(task) {
 
 // 页面主区域拆成任务信息、播放器和句子列表，方便边听边核对。
 function renderTask(task) {
+  ensureTranscriptViewState(task);
+
   if (!task) {
     detailEl.textContent = "尚未选择任务。";
+    reviewToolbarEl.classList.add("is-hidden");
     renderTranscriptEmpty("尚无转写结果。");
     outputToolbarEl.classList.add("is-hidden");
     saveMdButton.disabled = true;
@@ -118,14 +154,21 @@ function renderTask(task) {
 
   detailEl.innerHTML = detailLines.map((line) => `<div>${escapeHtml(line)}</div>`).join("");
 
-  const segments = task.results?.segments || [];
-  const fullText = task.results?.plain_text || task.results?.full_text || "";
+  const activeTranscript = getActiveTranscriptData(task);
+  const segments = activeTranscript.segments;
+  const fullText = activeTranscript.plainText;
   const hasAnyOutput = Boolean(segments.length || fullText.trim());
   outputToolbarEl.classList.toggle("is-hidden", !hasAnyOutput);
-  saveMdButton.disabled = !segments.length;
+  saveMdButton.disabled = !(task.results?.segments || []).length;
+  renderTranscriptToolbar(task);
 
   if (segments.length) {
-    renderTranscriptSegments(segments);
+    const visibleSegments = getVisibleTranscriptSegments(task);
+    if (!visibleSegments.length && transcriptViewState.reviewFilter === "review-only") {
+      renderReviewEmptyState("当前文本版本下没有需要重点核对的片段。");
+      return;
+    }
+    renderTranscriptSegments(visibleSegments);
     return;
   }
 
@@ -138,27 +181,84 @@ function renderTask(task) {
   renderTranscriptEmpty("尚无转写结果。");
 }
 
-function renderTranscriptSegments(segments) {
+function renderTranscriptToolbar(task) {
+  const activeTranscript = getActiveTranscriptData(task);
+  const segments = activeTranscript.segments;
+  const reviewSegments = getReviewSegments(segments);
+  const hasStructuredTranscript = Boolean(
+    segments.length || (getAlternateTranscriptSegments(task).length > 0)
+  );
+
+  reviewToolbarEl.classList.toggle("is-hidden", !hasStructuredTranscript);
+  if (!hasStructuredTranscript) {
+    return;
+  }
+
+  viewCleanButton.classList.toggle(
+    "is-active",
+    transcriptViewState.textVersion === "clean"
+  );
+  viewRawButton.classList.toggle("is-active", transcriptViewState.textVersion === "raw");
+  filterAllButton.classList.toggle(
+    "is-active",
+    transcriptViewState.reviewFilter === "all"
+  );
+  filterReviewButton.classList.toggle(
+    "is-active",
+    transcriptViewState.reviewFilter === "review-only"
+  );
+  reviewCountEl.textContent = `重点核对 ${reviewSegments.length}`;
+
+  const hasReviewSegments = reviewSegments.length > 0;
+  reviewPrevButton.disabled = !hasReviewSegments;
+  reviewNextButton.disabled = !hasReviewSegments;
+}
+
+function renderTranscriptSegments(entries) {
   outputEl.className = "transcript-list";
   outputEl.innerHTML = "";
 
-  for (const [index, segment] of segments.entries()) {
+  for (const entry of entries) {
+    const { segment, sourceIndex } = entry;
     const button = document.createElement("button");
     button.type = "button";
     button.className = "segment-button";
-    if (index === playerState.activeSegmentIndex) {
+    if (sourceIndex === playerState.activeSegmentIndex) {
       button.classList.add("is-active");
     }
-    button.dataset.segmentIndex = String(index);
+    if (segment.needs_review) {
+      button.classList.add("needs-review");
+    }
+    button.dataset.sourceIndex = String(sourceIndex);
+    const reviewReasons = Array.isArray(segment.review_reasons)
+      ? segment.review_reasons.filter(Boolean)
+      : [];
+    const reviewHtml = segment.needs_review
+      ? `
+      <span class="segment-review">
+        <span class="segment-review-badge">疑似错误片段</span>
+        <span class="segment-review-reasons">${escapeHtml(reviewReasons.join(" / "))}</span>
+      </span>
+    `
+      : "";
     button.innerHTML = `
       <span class="segment-time">${escapeHtml(formatTimestamp(segment.start))}</span>
-      <span class="segment-text">${escapeHtml(segment.text || "")}</span>
+      <span class="segment-copy">
+        <span class="segment-text">${escapeHtml(segment.text || "")}</span>
+        ${reviewHtml}
+      </span>
     `;
     button.addEventListener("click", async () => {
-      await jumpToSegment(index);
+      updateReviewCursorBySourceIndex(sourceIndex);
+      await jumpToSegment(sourceIndex);
     });
     outputEl.appendChild(button);
   }
+}
+
+function renderReviewEmptyState(message) {
+  outputEl.className = "empty-state";
+  outputEl.textContent = message;
 }
 
 function renderTranscriptEmpty(message) {
@@ -169,7 +269,7 @@ function renderTranscriptEmpty(message) {
 function updateTranscriptHighlight() {
   const segmentButtons = outputEl.querySelectorAll(".segment-button");
   for (const button of segmentButtons) {
-    const isActive = Number(button.dataset.segmentIndex) === playerState.activeSegmentIndex;
+    const isActive = Number(button.dataset.sourceIndex) === playerState.activeSegmentIndex;
     button.classList.toggle("is-active", isActive);
   }
 }
@@ -574,15 +674,103 @@ function findActiveSegmentIndex(segments, currentTime) {
 
 function syncActiveSegmentWithTime() {
   const task = currentTask();
-  const segments = task?.results?.segments || [];
+  const segments = getActiveTranscriptData(task).segments;
   playerState.activeSegmentIndex = findActiveSegmentIndex(segments, playerState.currentTime);
+  updateReviewCursorBySourceIndex(playerState.activeSegmentIndex);
   updateTranscriptHighlight();
 }
 
-async function jumpToSegment(index) {
+function getActiveTranscriptData(task) {
+  const results = task?.results || {};
+  if (transcriptViewState.textVersion === "raw") {
+    return {
+      segments: results.raw_segments || [],
+      plainText: results.raw_plain_text || results.plain_text || results.full_text || ""
+    };
+  }
+  return {
+    segments: results.segments || [],
+    plainText: results.plain_text || results.full_text || ""
+  };
+}
+
+function getAlternateTranscriptSegments(task) {
+  const results = task?.results || {};
+  if (transcriptViewState.textVersion === "raw") {
+    return results.segments || [];
+  }
+  return results.raw_segments || [];
+}
+
+function getVisibleTranscriptSegments(task) {
+  const segments = getActiveTranscriptData(task).segments;
+  const entries = segments.map((segment, sourceIndex) => ({
+    segment,
+    sourceIndex
+  }));
+  if (transcriptViewState.reviewFilter === "review-only") {
+    return entries.filter((entry) => entry.segment.needs_review);
+  }
+  return entries;
+}
+
+function getReviewSegments(segments) {
+  return segments
+    .map((segment, sourceIndex) => ({
+      segment,
+      sourceIndex
+    }))
+    .filter((entry) => entry.segment.needs_review);
+}
+
+function updateReviewCursorBySourceIndex(sourceIndex) {
   const task = currentTask();
-  const segments = task?.results?.segments || [];
-  const segment = segments[index];
+  const reviewSegments = getReviewSegments(getActiveTranscriptData(task).segments);
+  const nextCursor = reviewSegments.findIndex((entry) => entry.sourceIndex === sourceIndex);
+  transcriptViewState.activeReviewCursor = nextCursor;
+}
+
+function focusTranscriptSegment(sourceIndex) {
+  const button = outputEl.querySelector(`[data-source-index="${sourceIndex}"]`);
+  if (!button) {
+    return;
+  }
+  button.scrollIntoView({
+    block: "nearest",
+    behavior: "smooth"
+  });
+}
+
+async function jumpToAdjacentReviewSegment(direction) {
+  const task = currentTask();
+  const reviewSegments = getReviewSegments(getActiveTranscriptData(task).segments);
+  if (!reviewSegments.length) {
+    return;
+  }
+
+  const currentCursor = transcriptViewState.activeReviewCursor;
+  let nextCursor = currentCursor;
+  if (nextCursor < 0) {
+    nextCursor = direction > 0 ? 0 : reviewSegments.length - 1;
+  } else {
+    nextCursor = (nextCursor + direction + reviewSegments.length) % reviewSegments.length;
+  }
+
+  const target = reviewSegments[nextCursor];
+  transcriptViewState.activeReviewCursor = nextCursor;
+
+  if (transcriptViewState.reviewFilter === "review-only") {
+    renderTask(task);
+  }
+
+  focusTranscriptSegment(target.sourceIndex);
+  await jumpToSegment(target.sourceIndex);
+}
+
+async function jumpToSegment(sourceIndex) {
+  const task = currentTask();
+  const segments = getActiveTranscriptData(task).segments;
+  const segment = segments[sourceIndex];
 
   if (!segment) {
     return;
@@ -594,6 +782,13 @@ async function jumpToSegment(index) {
   }
 
   await seekTo(segment.start, { play: true });
+}
+
+function rerenderTranscriptView() {
+  const task = currentTask();
+  renderTask(task);
+  syncActiveSegmentWithTime();
+  updatePlayerUI();
 }
 
 playToggleButton.addEventListener("click", async () => {
@@ -754,6 +949,46 @@ saveMdButton.addEventListener("click", async () => {
   if (!result?.canceled) {
     setState("已保存 Markdown", { filePath: result.filePath });
   }
+});
+
+viewCleanButton.addEventListener("click", () => {
+  setTranscriptViewState({
+    textVersion: "clean",
+    activeReviewCursor: -1
+  });
+  rerenderTranscriptView();
+});
+
+viewRawButton.addEventListener("click", () => {
+  setTranscriptViewState({
+    textVersion: "raw",
+    activeReviewCursor: -1
+  });
+  rerenderTranscriptView();
+});
+
+filterAllButton.addEventListener("click", () => {
+  setTranscriptViewState({
+    reviewFilter: "all",
+    activeReviewCursor: -1
+  });
+  rerenderTranscriptView();
+});
+
+filterReviewButton.addEventListener("click", () => {
+  setTranscriptViewState({
+    reviewFilter: "review-only",
+    activeReviewCursor: -1
+  });
+  rerenderTranscriptView();
+});
+
+reviewPrevButton.addEventListener("click", async () => {
+  await jumpToAdjacentReviewSegment(-1);
+});
+
+reviewNextButton.addEventListener("click", async () => {
+  await jumpToAdjacentReviewSegment(1);
 });
 
 function formatTimestamp(seconds) {

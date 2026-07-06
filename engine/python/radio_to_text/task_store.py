@@ -37,9 +37,14 @@ class TaskStore:
             },
             "metadata": {},
             "results": {
+                "raw_chunks": [],
+                "raw_segments": [],
                 "segments": [],
+                "raw_speaker_segments": [],
                 "speaker_segments": [],
+                "raw_plain_text": "",
                 "plain_text": "",
+                "raw_speaker_text": "",
                 "speaker_text": "",
                 "full_text": "",
             },
@@ -102,8 +107,14 @@ class TaskStore:
     def normalized_audio_path(self, task_id: str) -> Path:
         return self.task_dir(task_id) / "working" / "normalized.wav"
 
+    def normalized_base_audio_path(self, task_id: str) -> Path:
+        return self.task_dir(task_id) / "working" / "normalized_base.wav"
+
     def transcript_path(self, task_id: str) -> Path:
         return self.task_dir(task_id) / "working" / "transcript.json"
+
+    def transcript_raw_chunks_path(self, task_id: str) -> Path:
+        return self.task_dir(task_id) / "working" / "transcript_raw_chunks.json"
 
     def diarization_path(self, task_id: str) -> Path:
         return self.task_dir(task_id) / "working" / "speaker_segments.json"

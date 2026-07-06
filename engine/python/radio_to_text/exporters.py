@@ -13,7 +13,11 @@ def export_txt(path: Path, content: str) -> None:
 def export_md(path: Path, segments: list[dict], task_id: str) -> None:
     lines = [f"# 语音转写结果 - {task_id}", ""]
     for segment in segments:
-        lines.append(f"- `{format_timestamp(segment['start'])}` {segment['text']}")
+        speaker = str(segment.get("speaker", "")).strip()
+        prefix = f"说话人 {speaker}：" if speaker else ""
+        lines.append(
+            f"- `{format_timestamp(segment['start'])}` {prefix}{segment['text']}"
+        )
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
