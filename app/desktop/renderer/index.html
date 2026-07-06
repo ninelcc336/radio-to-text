@@ -14,6 +14,18 @@
         --line: #d9cfbb;
         --accent: #a3462f;
         --accent-strong: #7d2f1d;
+        --export-bg: #efe4d2;
+        --export-hover: #e4d4bb;
+        --export-active: #9f5f2e;
+        --view-bg: #dfe7ea;
+        --view-hover: #d2dde2;
+        --view-active: #476779;
+        --success-bg: #dfeede;
+        --success-hover: #d0e3cf;
+        --success-ink: #2f6541;
+        --edit-bg: #f0e3cd;
+        --edit-hover: #e7d6ba;
+        --edit-ink: #835029;
         --shadow: rgba(69, 47, 20, 0.08);
       }
 
@@ -297,8 +309,11 @@
       }
 
       .output-toolbar {
-        display: grid;
-        gap: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
         margin-bottom: 16px;
       }
 
@@ -306,69 +321,128 @@
         display: none;
       }
 
-      .toolbar-row {
-        display: grid;
-        grid-template-columns: max-content 1fr;
-        gap: 12px;
-        align-items: start;
-      }
-
-      .toolbar-row.is-hidden {
-        display: none;
-      }
-
-      .toolbar-label {
-        display: inline-flex;
-        align-items: center;
-        min-height: 38px;
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        white-space: nowrap;
-      }
-
-      .toolbar-group {
+      .toolbar-main {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         flex-wrap: wrap;
         align-items: center;
+      }
+
+      .toolbar-main.is-hidden {
+        display: none;
       }
 
       .toolbar-cluster {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         flex-wrap: wrap;
         align-items: center;
       }
 
-      .toolbar button {
-        width: auto;
-        padding: 10px 14px;
-        border-radius: 10px;
-        font-size: 13px;
+      .toolbar-divider {
+        width: 1px;
+        align-self: stretch;
+        background: rgba(106, 100, 88, 0.16);
       }
 
-      .toolbar-toggle.is-active {
-        background: var(--accent-strong);
+      .toolbar-actions {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .output-toolbar button {
+        width: auto;
+        min-height: 34px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        font-size: 12px;
+        line-height: 1;
+      }
+
+      .toolbar-export-trigger {
+        background: var(--export-bg);
+        color: var(--ink);
+      }
+
+      .toolbar-export-trigger:hover {
+        background: var(--export-hover);
+      }
+
+      .toolbar-export-trigger.is-open {
+        background: var(--export-active);
         color: white;
       }
 
-      .toolbar-toggle.is-active:hover {
-        background: #652515;
+      .toolbar-export-trigger.is-open:hover {
+        background: #864b1f;
+      }
+
+      .toolbar-view {
+        background: var(--view-bg);
+        color: #29404b;
+      }
+
+      .toolbar-view:hover {
+        background: var(--view-hover);
+      }
+
+      .toolbar-toggle.toolbar-view.is-active {
+        background: var(--view-active);
+        color: white;
+      }
+
+      .toolbar-toggle.toolbar-view.is-active:hover {
+        background: #3e5c6d;
       }
 
       .toolbar-count {
         display: inline-flex;
         align-items: center;
-        min-height: 38px;
-        padding: 8px 12px;
+        min-height: 34px;
+        padding: 7px 11px;
         border-radius: 999px;
-        background: rgba(171, 104, 23, 0.12);
-        color: #8a5d2e;
-        font-size: 12px;
+        background: rgba(71, 103, 121, 0.14);
+        color: #476779;
+        font-size: 11px;
         font-weight: 700;
-        letter-spacing: 0.03em;
+        letter-spacing: 0.04em;
+      }
+
+      .toolbar-dropdown {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        z-index: 10;
+        display: grid;
+        gap: 6px;
+        min-width: 154px;
+        padding: 8px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 253, 248, 0.98);
+        box-shadow: 0 16px 34px rgba(69, 47, 20, 0.12);
+        backdrop-filter: blur(10px);
+      }
+
+      .toolbar-dropdown.is-hidden {
+        display: none;
+      }
+
+      .toolbar-dropdown button {
+        justify-content: flex-start;
+        min-width: 100%;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #f2e8d8;
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .toolbar-dropdown button:hover {
+        background: #e7d9c2;
       }
 
       .output-frame {
@@ -540,16 +614,57 @@
 
       .segment-actions {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         flex-wrap: wrap;
+        justify-content: flex-end;
         padding: 0 6px 0 106px;
+        opacity: 0;
+        transform: translateY(4px);
+        pointer-events: none;
+        transition: opacity 140ms ease, transform 140ms ease;
+      }
+
+      .segment-card:hover .segment-actions,
+      .segment-card:focus-within .segment-actions {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
       }
 
       .segment-actions button {
         width: auto;
-        padding: 8px 12px;
-        border-radius: 10px;
+        min-height: 32px;
+        padding: 7px 11px;
+        border-radius: 999px;
         font-size: 12px;
+        line-height: 1;
+      }
+
+      .segment-action-confirm {
+        background: var(--success-bg);
+        color: var(--success-ink);
+      }
+
+      .segment-action-confirm:hover {
+        background: var(--success-hover);
+      }
+
+      .segment-action-edit {
+        background: var(--edit-bg);
+        color: var(--edit-ink);
+      }
+
+      .segment-action-edit:hover {
+        background: var(--edit-hover);
+      }
+
+      .segment-action-save {
+        background: var(--success-ink);
+        color: white;
+      }
+
+      .segment-action-save:hover {
+        background: #265339;
       }
 
       .segment-status-chip {
@@ -602,7 +717,7 @@
 
       .segment-editor-actions {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         flex-wrap: wrap;
       }
 
@@ -617,9 +732,12 @@
           grid-template-columns: 1fr;
         }
 
-        .toolbar-row {
-          grid-template-columns: 1fr;
-          gap: 8px;
+        .output-toolbar {
+          align-items: stretch;
+        }
+
+        .toolbar-main {
+          width: 100%;
         }
 
         .segment-actions,
@@ -703,57 +821,87 @@
               <h2>文本产物</h2>
             </div>
             <div id="output-toolbar" class="output-toolbar is-hidden">
-              <div class="toolbar-row">
-                <div class="toolbar-label">导出</div>
-                <div class="toolbar-group">
-                  <button id="copy-output-button" class="secondary" type="button">复制文本</button>
-                  <button id="save-output-button" class="secondary" type="button">下载 TXT</button>
-                  <button id="save-md-button" class="secondary" type="button">下载 Markdown</button>
+              <div id="review-toolbar" class="toolbar-main is-hidden">
+                <div class="toolbar-cluster">
+                  <button
+                    id="view-clean-button"
+                    class="toolbar-view toolbar-toggle"
+                    type="button"
+                    title="查看清洗后的最终文本"
+                  >
+                    清洗
+                  </button>
+                  <button
+                    id="view-raw-button"
+                    class="toolbar-view toolbar-toggle"
+                    type="button"
+                    title="查看原始识别文本"
+                  >
+                    原始
+                  </button>
+                </div>
+                <div class="toolbar-divider" aria-hidden="true"></div>
+                <div class="toolbar-cluster">
+                  <button
+                    id="filter-all-button"
+                    class="toolbar-view toolbar-toggle"
+                    type="button"
+                    title="显示全部片段"
+                  >
+                    全部
+                  </button>
+                  <button
+                    id="filter-review-button"
+                    class="toolbar-view toolbar-toggle"
+                    type="button"
+                    title="仅显示需要重点核对的片段"
+                  >
+                    重点
+                  </button>
+                  <button
+                    id="filter-unprocessed-button"
+                    class="toolbar-view toolbar-toggle"
+                    type="button"
+                    title="仅显示尚未处理的片段"
+                  >
+                    未处理
+                  </button>
+                  <span id="review-count" class="toolbar-count">未处理 0</span>
                 </div>
               </div>
-              <div id="review-toolbar" class="toolbar-row is-hidden">
-                <div class="toolbar-label">查看与定位</div>
-                <div class="toolbar-group">
-                  <div class="toolbar-cluster">
-                    <button
-                      id="view-clean-button"
-                      class="secondary toolbar-toggle"
-                      type="button"
-                    >
-                      清洗文本
-                    </button>
-                    <button
-                      id="view-raw-button"
-                      class="secondary toolbar-toggle"
-                      type="button"
-                    >
-                      原始文本
-                    </button>
-                  </div>
-                  <div class="toolbar-cluster">
-                    <button
-                      id="filter-all-button"
-                      class="secondary toolbar-toggle"
-                      type="button"
-                    >
-                      全部片段
-                    </button>
-                    <button
-                      id="filter-review-button"
-                      class="secondary toolbar-toggle"
-                      type="button"
-                    >
-                      仅看重点
-                    </button>
-                    <button
-                      id="filter-unprocessed-button"
-                      class="secondary toolbar-toggle"
-                      type="button"
-                    >
-                      仅看未处理
-                    </button>
-                    <span id="review-count" class="toolbar-count">未处理 0</span>
-                  </div>
+              <div class="toolbar-actions">
+                <button
+                  id="export-menu-button"
+                  class="toolbar-export-trigger"
+                  type="button"
+                  title="展开导出选项"
+                  aria-haspopup="true"
+                  aria-expanded="false"
+                >
+                  导出
+                </button>
+                <div id="export-dropdown" class="toolbar-dropdown is-hidden">
+                  <button
+                    id="copy-output-button"
+                    type="button"
+                    title="复制当前文本"
+                  >
+                    复制文本
+                  </button>
+                  <button
+                    id="save-output-button"
+                    type="button"
+                    title="导出 TXT"
+                  >
+                    导出 TXT
+                  </button>
+                  <button
+                    id="save-md-button"
+                    type="button"
+                    title="导出 Markdown"
+                  >
+                    导出 Markdown
+                  </button>
                 </div>
               </div>
             </div>

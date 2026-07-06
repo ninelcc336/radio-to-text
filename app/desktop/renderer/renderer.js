@@ -10,6 +10,8 @@ const refreshButton = document.getElementById("refresh-button");
 const copyOutputButton = document.getElementById("copy-output-button");
 const saveOutputButton = document.getElementById("save-output-button");
 const saveMdButton = document.getElementById("save-md-button");
+const exportMenuButton = document.getElementById("export-menu-button");
+const exportDropdownEl = document.getElementById("export-dropdown");
 const viewCleanButton = document.getElementById("view-clean-button");
 const viewRawButton = document.getElementById("view-raw-button");
 const filterAllButton = document.getElementById("filter-all-button");
@@ -40,6 +42,10 @@ const segmentEditorState = {
   taskId: null,
   sourceIndex: -1,
   draftText: ""
+};
+
+const exportMenuState = {
+  isOpen: false
 };
 
 const playerState = {
@@ -111,6 +117,13 @@ function setTranscriptViewState(nextState) {
   Object.assign(transcriptViewState, nextState);
 }
 
+function setExportMenuOpen(isOpen) {
+  exportMenuState.isOpen = Boolean(isOpen);
+  exportDropdownEl.classList.toggle("is-hidden", !exportMenuState.isOpen);
+  exportMenuButton.classList.toggle("is-open", exportMenuState.isOpen);
+  exportMenuButton.setAttribute("aria-expanded", String(exportMenuState.isOpen));
+}
+
 function resetSegmentEditorState(taskId = null) {
   segmentEditorState.taskId = taskId;
   segmentEditorState.sourceIndex = -1;
@@ -149,6 +162,7 @@ function renderTask(task) {
     reviewToolbarEl.classList.add("is-hidden");
     renderTranscriptEmpty("尚无转写结果。");
     outputToolbarEl.classList.add("is-hidden");
+    setExportMenuOpen(false);
     saveMdButton.disabled = true;
     return;
   }
@@ -176,7 +190,10 @@ function renderTask(task) {
   const fullText = activeTranscript.plainText;
   const hasAnyOutput = Boolean(segments.length || fullText.trim());
   outputToolbarEl.classList.toggle("is-hidden", !hasAnyOutput);
-  saveMdButton.disabled = !(task.results?.segments || []).length;
+  if (!hasAnyOutput) {
+    setExportMenuOpen(false);
+  }
+  saveMdButton.disabled = !buildTranscriptLines(task).length;
   renderTranscriptToolbar(task);
 
   if (segments.length) {
@@ -203,14 +220,21 @@ function renderTask(task) {
 }
 
 function renderTranscriptToolbar(task) {
+  const activeTranscript = getActiveTranscriptData(task);
   const finalSegments = getFinalTranscriptSegments(task);
   const pendingSegments = finalSegments.filter((segment) => isPendingReview(segment));
+  const hasAnyOutput = Boolean(
+    activeTranscript.segments.length || activeTranscript.plainText.trim()
+  );
   const hasStructuredTranscript = Boolean(
-    getActiveTranscriptData(task).segments.length ||
-      (getAlternateTranscriptSegments(task).length > 0)
+    activeTranscript.segments.length || getAlternateTranscriptSegments(task).length > 0
   );
 
   reviewToolbarEl.classList.toggle("is-hidden", !hasStructuredTranscript);
+  exportMenuButton.disabled = !hasAnyOutput;
+  if (!hasAnyOutput) {
+    setExportMenuOpen(false);
+  }
   if (!hasStructuredTranscript) {
     return;
   }
@@ -325,8 +349,9 @@ function buildSegmentActions(task, reviewMeta, sourceIndex) {
   if (reviewMeta.reviewStatus === "pending") {
     const confirmButton = document.createElement("button");
     confirmButton.type = "button";
-    confirmButton.className = "secondary";
-    confirmButton.textContent = "确认无误";
+    confirmButton.className = "segment-action-confirm";
+    confirmButton.textContent = "确认";
+    confirmButton.title = "确认这条片段无误";
     confirmButton.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -337,9 +362,11 @@ function buildSegmentActions(task, reviewMeta, sourceIndex) {
 
   const editButton = document.createElement("button");
   editButton.type = "button";
-  editButton.className = "secondary";
+  editButton.className = "segment-action-edit";
   editButton.textContent =
-    reviewMeta.reviewStatus === "corrected" ? "再次编辑" : "编辑修正";
+    reviewMeta.reviewStatus === "corrected" ? "再修正" : "修正";
+  editButton.title =
+    reviewMeta.reviewStatus === "corrected" ? "再次编辑这条片段" : "编辑并修正这条片段";
   editButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -369,7 +396,8 @@ function buildSegmentEditor(segment, sourceIndex) {
 
   const saveButton = document.createElement("button");
   saveButton.type = "button";
-  saveButton.textContent = "保存修正";
+  saveButton.className = "segment-action-save";
+  saveButton.textContent = "保存";
   saveButton.addEventListener("click", async (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -383,7 +411,7 @@ function buildSegmentEditor(segment, sourceIndex) {
 
   const cancelButton = document.createElement("button");
   cancelButton.type = "button";
-  cancelButton.className = "secondary";
+  cancelButton.className = "segment-action-edit";
   cancelButton.textContent = "取消";
   cancelButton.addEventListener("click", (event) => {
     event.preventDefault();
@@ -585,6 +613,7 @@ function escapeHtml(value) {
 
 async function runRequest(request, pendingMessage) {
   // 所有按钮行为最终都收敛到这个函数，便于统一处理状态和刷新列表。
+  setExportMenuOpen(false);
   setState(pendingMessage, { request }, { loading: true });
 
   try {
@@ -644,13 +673,13 @@ function cleanTranscriptLine(line) {
 }
 
 function buildTranscriptLines(task) {
-  const segments = task?.results?.segments || [];
+  const activeTranscript = getActiveTranscriptData(task);
+  const segments = activeTranscript.segments || [];
   if (segments.length) {
     return segments.map((segment) => cleanTranscriptLine(segment.text)).filter(Boolean);
   }
 
-  const rawText = task?.results?.plain_text || task?.results?.full_text || "";
-  return rawText
+  return String(activeTranscript.plainText || "")
     .split(/\r?\n/u)
     .map((line) => cleanTranscriptLine(line))
     .filter(Boolean);
@@ -955,6 +984,7 @@ async function submitSegmentReview(sourceIndex, reviewAction, reviewedText = "")
 }
 
 function rerenderTranscriptView() {
+  setExportMenuOpen(false);
   const task = currentTask();
   renderTask(task);
   syncActiveSegmentWithTime();
@@ -1049,6 +1079,7 @@ refreshButton.addEventListener("click", async () => {
 });
 
 copyOutputButton.addEventListener("click", async () => {
+  setExportMenuOpen(false);
   const task = currentTask();
   const text = buildTranscriptText(task);
   if (!text) {
@@ -1065,6 +1096,7 @@ copyOutputButton.addEventListener("click", async () => {
 });
 
 saveOutputButton.addEventListener("click", async () => {
+  setExportMenuOpen(false);
   const task = currentTask();
   const text = buildTranscriptText(task);
   if (!text) {
@@ -1091,6 +1123,7 @@ saveOutputButton.addEventListener("click", async () => {
 });
 
 saveMdButton.addEventListener("click", async () => {
+  setExportMenuOpen(false);
   const task = currentTask();
   const lines = buildTranscriptLines(task);
   if (!lines.length) {
@@ -1119,6 +1152,19 @@ saveMdButton.addEventListener("click", async () => {
   if (!result?.canceled) {
     setState("已保存 Markdown", { filePath: result.filePath });
   }
+});
+
+exportMenuButton.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  if (exportMenuButton.disabled) {
+    return;
+  }
+  setExportMenuOpen(!exportMenuState.isOpen);
+});
+
+exportDropdownEl.addEventListener("click", (event) => {
+  event.stopPropagation();
 });
 
 viewCleanButton.addEventListener("click", () => {
@@ -1159,6 +1205,12 @@ filterUnprocessedButton.addEventListener("click", () => {
   });
   resetSegmentEditorState(currentTask()?.task_id || null);
   rerenderTranscriptView();
+});
+
+document.addEventListener("click", () => {
+  if (exportMenuState.isOpen) {
+    setExportMenuOpen(false);
+  }
 });
 
 function formatTimestamp(seconds) {
