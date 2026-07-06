@@ -24,6 +24,9 @@ class TranscriptSegment:
     source_chunk_id: str | None = None
     needs_review: bool = False
     review_reasons: list[str] = field(default_factory=list)
+    review_status: str = "pending"
+    reviewed_text: str | None = None
+    review_updated_at: str | None = None
 
 
 @dataclass

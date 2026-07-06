@@ -14,9 +14,8 @@ const viewCleanButton = document.getElementById("view-clean-button");
 const viewRawButton = document.getElementById("view-raw-button");
 const filterAllButton = document.getElementById("filter-all-button");
 const filterReviewButton = document.getElementById("filter-review-button");
+const filterUnprocessedButton = document.getElementById("filter-unprocessed-button");
 const reviewCountEl = document.getElementById("review-count");
-const reviewPrevButton = document.getElementById("review-prev-button");
-const reviewNextButton = document.getElementById("review-next-button");
 const audioStatusEl = document.getElementById("audio-status");
 const playToggleButton = document.getElementById("play-toggle-button");
 const seekBackwardButton = document.getElementById("seek-backward-button");
@@ -34,8 +33,13 @@ let audioLoadToken = 0;
 const transcriptViewState = {
   taskId: null,
   textVersion: "clean",
-  reviewFilter: "all",
-  activeReviewCursor: -1
+  reviewFilter: "all"
+};
+
+const segmentEditorState = {
+  taskId: null,
+  sourceIndex: -1,
+  draftText: ""
 };
 
 const playerState = {
@@ -94,7 +98,6 @@ function resetTranscriptViewState(taskId = null) {
   transcriptViewState.taskId = taskId;
   transcriptViewState.textVersion = "clean";
   transcriptViewState.reviewFilter = "all";
-  transcriptViewState.activeReviewCursor = -1;
 }
 
 function ensureTranscriptViewState(task) {
@@ -106,6 +109,19 @@ function ensureTranscriptViewState(task) {
 
 function setTranscriptViewState(nextState) {
   Object.assign(transcriptViewState, nextState);
+}
+
+function resetSegmentEditorState(taskId = null) {
+  segmentEditorState.taskId = taskId;
+  segmentEditorState.sourceIndex = -1;
+  segmentEditorState.draftText = "";
+}
+
+function ensureSegmentEditorState(task) {
+  const taskId = task?.task_id || null;
+  if (segmentEditorState.taskId !== taskId) {
+    resetSegmentEditorState(taskId);
+  }
 }
 
 async function syncTaskDetailFromCache() {
@@ -126,6 +142,7 @@ async function syncTaskView(task) {
 // 页面主区域拆成任务信息、播放器和句子列表，方便边听边核对。
 function renderTask(task) {
   ensureTranscriptViewState(task);
+  ensureSegmentEditorState(task);
 
   if (!task) {
     detailEl.textContent = "尚未选择任务。";
@@ -164,8 +181,12 @@ function renderTask(task) {
 
   if (segments.length) {
     const visibleSegments = getVisibleTranscriptSegments(task);
-    if (!visibleSegments.length && transcriptViewState.reviewFilter === "review-only") {
-      renderReviewEmptyState("当前文本版本下没有需要重点核对的片段。");
+    if (!visibleSegments.length && transcriptViewState.reviewFilter !== "all") {
+      if (transcriptViewState.reviewFilter === "review-only") {
+        renderReviewEmptyState("当前文本版本下没有需要重点核对的片段。");
+      } else {
+        renderReviewEmptyState("当前文本版本下没有未处理片段。");
+      }
       return;
     }
     renderTranscriptSegments(visibleSegments);
@@ -182,11 +203,11 @@ function renderTask(task) {
 }
 
 function renderTranscriptToolbar(task) {
-  const activeTranscript = getActiveTranscriptData(task);
-  const segments = activeTranscript.segments;
-  const reviewSegments = getReviewSegments(segments);
+  const finalSegments = getFinalTranscriptSegments(task);
+  const pendingSegments = finalSegments.filter((segment) => isPendingReview(segment));
   const hasStructuredTranscript = Boolean(
-    segments.length || (getAlternateTranscriptSegments(task).length > 0)
+    getActiveTranscriptData(task).segments.length ||
+      (getAlternateTranscriptSegments(task).length > 0)
   );
 
   reviewToolbarEl.classList.toggle("is-hidden", !hasStructuredTranscript);
@@ -207,40 +228,36 @@ function renderTranscriptToolbar(task) {
     "is-active",
     transcriptViewState.reviewFilter === "review-only"
   );
-  reviewCountEl.textContent = `重点核对 ${reviewSegments.length}`;
-
-  const hasReviewSegments = reviewSegments.length > 0;
-  reviewPrevButton.disabled = !hasReviewSegments;
-  reviewNextButton.disabled = !hasReviewSegments;
+  filterUnprocessedButton.classList.toggle(
+    "is-active",
+    transcriptViewState.reviewFilter === "pending-only"
+  );
+  reviewCountEl.textContent = `未处理 ${pendingSegments.length}`;
 }
 
 function renderTranscriptSegments(entries) {
   outputEl.className = "transcript-list";
   outputEl.innerHTML = "";
+  const task = currentTask();
+  const isEditableView = transcriptViewState.textVersion === "clean";
 
   for (const entry of entries) {
-    const { segment, sourceIndex } = entry;
+    const { segment, sourceIndex, reviewMeta } = entry;
+    const card = document.createElement("div");
+    card.className = "segment-card";
+    card.dataset.sourceIndex = String(sourceIndex);
+    if (sourceIndex === playerState.activeSegmentIndex) {
+      card.classList.add("is-active");
+    }
+    if (reviewMeta.needsReview && reviewMeta.reviewStatus === "pending") {
+      card.classList.add("needs-review");
+    }
+
     const button = document.createElement("button");
     button.type = "button";
     button.className = "segment-button";
-    if (sourceIndex === playerState.activeSegmentIndex) {
-      button.classList.add("is-active");
-    }
-    if (segment.needs_review) {
-      button.classList.add("needs-review");
-    }
-    button.dataset.sourceIndex = String(sourceIndex);
-    const reviewReasons = Array.isArray(segment.review_reasons)
-      ? segment.review_reasons.filter(Boolean)
-      : [];
-    const reviewHtml = segment.needs_review
-      ? `
-      <span class="segment-review">
-        <span class="segment-review-badge">疑似错误片段</span>
-        <span class="segment-review-reasons">${escapeHtml(reviewReasons.join(" / "))}</span>
-      </span>
-    `
-      : "";
+    const reviewReasons = reviewMeta.reviewReasons;
+    const reviewHtml = renderSegmentReviewBlock(reviewMeta, reviewReasons);
     button.innerHTML = `
       <span class="segment-time">${escapeHtml(formatTimestamp(segment.start))}</span>
       <span class="segment-copy">
@@ -249,11 +266,139 @@ function renderTranscriptSegments(entries) {
       </span>
     `;
     button.addEventListener("click", async () => {
-      updateReviewCursorBySourceIndex(sourceIndex);
       await jumpToSegment(sourceIndex);
     });
-    outputEl.appendChild(button);
+    card.appendChild(button);
+
+    if (isEditableView) {
+      if (segmentEditorState.sourceIndex === sourceIndex) {
+        card.appendChild(buildSegmentEditor(segment, sourceIndex));
+      } else {
+        const actions = buildSegmentActions(task, reviewMeta, sourceIndex);
+        if (actions) {
+          card.appendChild(actions);
+        }
+      }
+    }
+
+    outputEl.appendChild(card);
   }
+}
+
+function renderSegmentReviewBlock(reviewMeta, reviewReasons) {
+  if (reviewMeta.reviewStatus === "confirmed") {
+    return `
+      <span class="segment-review">
+        <span class="segment-status-chip is-confirmed">已确认</span>
+      </span>
+    `;
+  }
+
+  if (reviewMeta.reviewStatus === "corrected") {
+    return `
+      <span class="segment-review">
+        <span class="segment-status-chip is-corrected">已修正</span>
+      </span>
+    `;
+  }
+
+  if (!reviewMeta.needsReview) {
+    return "";
+  }
+
+  return `
+    <span class="segment-review">
+      <span class="segment-review-badge">疑似错误片段</span>
+      <span class="segment-review-reasons">${escapeHtml(reviewReasons.join(" / "))}</span>
+    </span>
+  `;
+}
+
+function buildSegmentActions(task, reviewMeta, sourceIndex) {
+  if (!task) {
+    return null;
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "segment-actions";
+
+  if (reviewMeta.reviewStatus === "pending") {
+    const confirmButton = document.createElement("button");
+    confirmButton.type = "button";
+    confirmButton.className = "secondary";
+    confirmButton.textContent = "确认无误";
+    confirmButton.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await submitSegmentReview(sourceIndex, "confirm");
+    });
+    actions.appendChild(confirmButton);
+  }
+
+  const editButton = document.createElement("button");
+  editButton.type = "button";
+  editButton.className = "secondary";
+  editButton.textContent =
+    reviewMeta.reviewStatus === "corrected" ? "再次编辑" : "编辑修正";
+  editButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    beginSegmentEdit(sourceIndex);
+  });
+  actions.appendChild(editButton);
+  return actions;
+}
+
+function buildSegmentEditor(segment, sourceIndex) {
+  const editor = document.createElement("div");
+  editor.className = "segment-editor";
+
+  const textarea = document.createElement("textarea");
+  textarea.value = segmentEditorState.draftText;
+  textarea.placeholder = "输入修正后的文本";
+  textarea.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+  textarea.addEventListener("input", (event) => {
+    segmentEditorState.draftText = event.target.value;
+  });
+  editor.appendChild(textarea);
+
+  const actions = document.createElement("div");
+  actions.className = "segment-editor-actions";
+
+  const saveButton = document.createElement("button");
+  saveButton.type = "button";
+  saveButton.textContent = "保存修正";
+  saveButton.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await submitSegmentReview(
+      sourceIndex,
+      "correct",
+      segmentEditorState.draftText.trim()
+    );
+  });
+  actions.appendChild(saveButton);
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.className = "secondary";
+  cancelButton.textContent = "取消";
+  cancelButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    resetSegmentEditorState(currentTask()?.task_id || null);
+    rerenderTranscriptView();
+  });
+  actions.appendChild(cancelButton);
+
+  editor.appendChild(actions);
+  queueMicrotask(() => {
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  });
+  return editor;
 }
 
 function renderReviewEmptyState(message) {
@@ -267,10 +412,10 @@ function renderTranscriptEmpty(message) {
 }
 
 function updateTranscriptHighlight() {
-  const segmentButtons = outputEl.querySelectorAll(".segment-button");
-  for (const button of segmentButtons) {
-    const isActive = Number(button.dataset.sourceIndex) === playerState.activeSegmentIndex;
-    button.classList.toggle("is-active", isActive);
+  const segmentCards = outputEl.querySelectorAll(".segment-card");
+  for (const card of segmentCards) {
+    const isActive = Number(card.dataset.sourceIndex) === playerState.activeSegmentIndex;
+    card.classList.toggle("is-active", isActive);
   }
 }
 
@@ -676,8 +821,11 @@ function syncActiveSegmentWithTime() {
   const task = currentTask();
   const segments = getActiveTranscriptData(task).segments;
   playerState.activeSegmentIndex = findActiveSegmentIndex(segments, playerState.currentTime);
-  updateReviewCursorBySourceIndex(playerState.activeSegmentIndex);
   updateTranscriptHighlight();
+}
+
+function getFinalTranscriptSegments(task) {
+  return task?.results?.segments || [];
 }
 
 function getActiveTranscriptData(task) {
@@ -702,32 +850,41 @@ function getAlternateTranscriptSegments(task) {
   return results.raw_segments || [];
 }
 
+function getReviewStatus(segment) {
+  return String(segment?.review_status || "pending").trim() || "pending";
+}
+
+function isPendingReview(segment) {
+  return getReviewStatus(segment) === "pending";
+}
+
+function getSegmentReviewMeta(task, sourceIndex) {
+  const finalSegment = getFinalTranscriptSegments(task)[sourceIndex] || {};
+  return {
+    reviewStatus: getReviewStatus(finalSegment),
+    needsReview: Boolean(finalSegment?.needs_review),
+    reviewReasons: Array.isArray(finalSegment?.review_reasons)
+      ? finalSegment.review_reasons.filter(Boolean)
+      : []
+  };
+}
+
 function getVisibleTranscriptSegments(task) {
   const segments = getActiveTranscriptData(task).segments;
   const entries = segments.map((segment, sourceIndex) => ({
     segment,
-    sourceIndex
+    sourceIndex,
+    reviewMeta: getSegmentReviewMeta(task, sourceIndex)
   }));
   if (transcriptViewState.reviewFilter === "review-only") {
-    return entries.filter((entry) => entry.segment.needs_review);
+    return entries.filter(
+      (entry) => entry.reviewMeta.needsReview && entry.reviewMeta.reviewStatus === "pending"
+    );
+  }
+  if (transcriptViewState.reviewFilter === "pending-only") {
+    return entries.filter((entry) => entry.reviewMeta.reviewStatus === "pending");
   }
   return entries;
-}
-
-function getReviewSegments(segments) {
-  return segments
-    .map((segment, sourceIndex) => ({
-      segment,
-      sourceIndex
-    }))
-    .filter((entry) => entry.segment.needs_review);
-}
-
-function updateReviewCursorBySourceIndex(sourceIndex) {
-  const task = currentTask();
-  const reviewSegments = getReviewSegments(getActiveTranscriptData(task).segments);
-  const nextCursor = reviewSegments.findIndex((entry) => entry.sourceIndex === sourceIndex);
-  transcriptViewState.activeReviewCursor = nextCursor;
 }
 
 function focusTranscriptSegment(sourceIndex) {
@@ -739,32 +896,6 @@ function focusTranscriptSegment(sourceIndex) {
     block: "nearest",
     behavior: "smooth"
   });
-}
-
-async function jumpToAdjacentReviewSegment(direction) {
-  const task = currentTask();
-  const reviewSegments = getReviewSegments(getActiveTranscriptData(task).segments);
-  if (!reviewSegments.length) {
-    return;
-  }
-
-  const currentCursor = transcriptViewState.activeReviewCursor;
-  let nextCursor = currentCursor;
-  if (nextCursor < 0) {
-    nextCursor = direction > 0 ? 0 : reviewSegments.length - 1;
-  } else {
-    nextCursor = (nextCursor + direction + reviewSegments.length) % reviewSegments.length;
-  }
-
-  const target = reviewSegments[nextCursor];
-  transcriptViewState.activeReviewCursor = nextCursor;
-
-  if (transcriptViewState.reviewFilter === "review-only") {
-    renderTask(task);
-  }
-
-  focusTranscriptSegment(target.sourceIndex);
-  await jumpToSegment(target.sourceIndex);
 }
 
 async function jumpToSegment(sourceIndex) {
@@ -782,6 +913,45 @@ async function jumpToSegment(sourceIndex) {
   }
 
   await seekTo(segment.start, { play: true });
+}
+
+function beginSegmentEdit(sourceIndex) {
+  const task = currentTask();
+  const segment = getFinalTranscriptSegments(task)[sourceIndex];
+  if (!segment) {
+    return;
+  }
+  segmentEditorState.taskId = task?.task_id || null;
+  segmentEditorState.sourceIndex = sourceIndex;
+  segmentEditorState.draftText = String(segment.text || "");
+  rerenderTranscriptView();
+}
+
+async function submitSegmentReview(sourceIndex, reviewAction, reviewedText = "") {
+  const task = currentTask();
+  if (!task) {
+    return;
+  }
+
+  if (reviewAction === "correct" && !String(reviewedText || "").trim()) {
+    setState("保存失败", { ok: false, error: "修正文本不能为空。" });
+    return;
+  }
+
+  await runRequest(
+    {
+      action: "update_segment_review",
+      payload: {
+        taskId: task.task_id,
+        segmentIndex: sourceIndex,
+        reviewAction,
+        reviewedText: reviewedText || undefined
+      }
+    },
+    reviewAction === "confirm" ? "正在保存确认结果" : "正在保存修正结果"
+  );
+  resetSegmentEditorState(task.task_id);
+  rerenderTranscriptView();
 }
 
 function rerenderTranscriptView() {
@@ -953,42 +1123,42 @@ saveMdButton.addEventListener("click", async () => {
 
 viewCleanButton.addEventListener("click", () => {
   setTranscriptViewState({
-    textVersion: "clean",
-    activeReviewCursor: -1
+    textVersion: "clean"
   });
+  resetSegmentEditorState(currentTask()?.task_id || null);
   rerenderTranscriptView();
 });
 
 viewRawButton.addEventListener("click", () => {
   setTranscriptViewState({
-    textVersion: "raw",
-    activeReviewCursor: -1
+    textVersion: "raw"
   });
+  resetSegmentEditorState(currentTask()?.task_id || null);
   rerenderTranscriptView();
 });
 
 filterAllButton.addEventListener("click", () => {
   setTranscriptViewState({
-    reviewFilter: "all",
-    activeReviewCursor: -1
+    reviewFilter: "all"
   });
+  resetSegmentEditorState(currentTask()?.task_id || null);
   rerenderTranscriptView();
 });
 
 filterReviewButton.addEventListener("click", () => {
   setTranscriptViewState({
-    reviewFilter: "review-only",
-    activeReviewCursor: -1
+    reviewFilter: "review-only"
   });
+  resetSegmentEditorState(currentTask()?.task_id || null);
   rerenderTranscriptView();
 });
 
-reviewPrevButton.addEventListener("click", async () => {
-  await jumpToAdjacentReviewSegment(-1);
-});
-
-reviewNextButton.addEventListener("click", async () => {
-  await jumpToAdjacentReviewSegment(1);
+filterUnprocessedButton.addEventListener("click", () => {
+  setTranscriptViewState({
+    reviewFilter: "pending-only"
+  });
+  resetSegmentEditorState(currentTask()?.task_id || null);
+  rerenderTranscriptView();
 });
 
 function formatTimestamp(seconds) {

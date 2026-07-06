@@ -136,6 +136,23 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
             data={"task": task},
         )
 
+    if action == "update_segment_review":
+        from .pipeline import ProcessingPipeline
+
+        pipeline = ProcessingPipeline(config)
+        task = pipeline.update_segment_review(
+            payload["taskId"],
+            int(payload["segmentIndex"]),
+            payload["reviewAction"],
+            reviewed_text=payload.get("reviewedText"),
+        )
+        return build_response(
+            ok=True,
+            status="completed",
+            action=action,
+            data={"task": task},
+        )
+
     if action == "delete_task":
         task_id = payload["taskId"]
         store.delete_task(task_id)
@@ -172,6 +189,9 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
                 "source_chunk_id": None,
                 "needs_review": False,
                 "review_reasons": [],
+                "review_status": "pending",
+                "reviewed_text": None,
+                "review_updated_at": None,
             },
             {
                 "start": 4.2,
@@ -183,6 +203,9 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
                 "source_chunk_id": None,
                 "needs_review": False,
                 "review_reasons": [],
+                "review_status": "pending",
+                "reviewed_text": None,
+                "review_updated_at": None,
             },
         ]
         task["results"]["segments"] = list(task["results"]["raw_segments"])

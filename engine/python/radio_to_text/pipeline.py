@@ -13,7 +13,7 @@ from .exporters import export_json, export_md, export_txt
 from .postprocess import TranscriptPostProcessor
 from .task_store import TaskStore
 from .transcribe import Transcriber
-from .utils import format_timestamp
+from .utils import format_timestamp, utc_now
 
 
 class ProcessingPipeline:
@@ -95,15 +95,8 @@ class ProcessingPipeline:
         task["results"]["raw_chunks"] = raw_chunk_payload
         task["results"]["raw_segments"] = raw_transcript_payload
         task["results"]["segments"] = transcript_payload
-        task["results"]["raw_plain_text"] = "\n".join(
-            f"[{format_timestamp(item['start'])}] {item['text']}"
-            for item in raw_transcript_payload
-        )
-        task["results"]["plain_text"] = "\n".join(
-            f"[{format_timestamp(item['start'])}] {item['text']}"
-            for item in transcript_payload
-        )
-        task["results"]["full_text"] = task["results"]["plain_text"]
+        task["results"]["raw_plain_text"] = self._build_plain_text(raw_transcript_payload)
+        self._rebuild_transcript_outputs(task)
         self.store.append_log(task, f"转写完成，共生成 {len(transcript_payload)} 段。")
 
         task["stage"] = "diarizing"
@@ -122,14 +115,8 @@ class ProcessingPipeline:
         )
         task["results"]["raw_speaker_segments"] = raw_speaker_payload
         task["results"]["speaker_segments"] = speaker_payload
-        task["results"]["raw_speaker_text"] = "\n".join(
-            f"[{format_timestamp(item['start'])}] 说话人 {item['speaker']}：{item['text']}"
-            for item in raw_speaker_payload
-        )
-        task["results"]["speaker_text"] = "\n".join(
-            f"[{format_timestamp(item['start'])}] 说话人 {item['speaker']}：{item['text']}"
-            for item in speaker_payload
-        )
+        task["results"]["raw_speaker_text"] = self._build_speaker_text(raw_speaker_payload)
+        self._rebuild_transcript_outputs(task)
         task["metadata"]["speaker_count"] = len(
             sorted({item["speaker"] for item in speaker_payload})
         )
@@ -147,6 +134,62 @@ class ProcessingPipeline:
         self.store.append_log(task, "任务处理完成。")
         self.store.save_task(task)
         return task
+
+    def update_segment_review(
+        self,
+        task_id: str,
+        segment_index: int,
+        review_action: str,
+        reviewed_text: str | None = None,
+    ) -> dict[str, Any]:
+        task = self.store.load_task(task_id)
+        segments = [dict(item) for item in task["results"].get("segments", [])]
+        speaker_segments = [
+            dict(item) for item in task["results"].get("speaker_segments", [])
+        ]
+        if not segments:
+            raise RuntimeError("No transcript segments available for review")
+        if segment_index < 0 or segment_index >= len(segments):
+            raise IndexError(f"Segment index out of range: {segment_index}")
+
+        for segment in segments:
+            self._ensure_review_defaults(segment)
+
+        segment = segments[segment_index]
+        action = str(review_action or "").strip().lower()
+        updated_at = utc_now()
+
+        if action == "confirm":
+            segment["review_status"] = "confirmed"
+            segment["review_updated_at"] = updated_at
+        elif action == "correct":
+            next_text = str(reviewed_text or "").strip()
+            if not next_text:
+                raise ValueError("Reviewed text must not be empty")
+            segment["text"] = next_text
+            segment["review_status"] = "corrected"
+            segment["reviewed_text"] = next_text
+            segment["review_updated_at"] = updated_at
+        else:
+            raise RuntimeError(f"Unsupported review action: {review_action}")
+
+        task["results"]["segments"] = segments
+        task["results"]["speaker_segments"] = self._sync_speaker_segment_texts(
+            segments, speaker_segments
+        )
+        self._rebuild_transcript_outputs(task)
+        self._write_working_results(task_id, task)
+
+        segment_start = format_timestamp(segment["start"])
+        if action == "confirm":
+            self.store.append_log(task, f"已确认片段 {segment_start}。")
+        else:
+            self.store.append_log(task, f"已修正片段 {segment_start}。")
+
+        self.store.save_task(task)
+        for fmt in ("txt", "md", "json"):
+            self.export_task(task_id, fmt)
+        return self.store.load_task(task_id)
 
     def _annotate_segment_for_review(self, segment):
         reasons: list[str] = []
@@ -179,6 +222,100 @@ class ProcessingPipeline:
 
     def _contains_ascii_token(self, text: str) -> bool:
         return bool(re.search(r"[A-Za-z]{2,}", text))
+
+    def _ensure_review_defaults(self, segment: dict[str, Any]) -> None:
+        segment.setdefault("review_status", "pending")
+        segment.setdefault("reviewed_text", None)
+        segment.setdefault("review_updated_at", None)
+
+    def _build_plain_text(self, segments: list[dict[str, Any]]) -> str:
+        return "\n".join(
+            f"[{format_timestamp(item['start'])}] {item['text']}" for item in segments
+        )
+
+    def _build_speaker_text(self, speaker_segments: list[dict[str, Any]]) -> str:
+        return "\n".join(
+            f"[{format_timestamp(item['start'])}] 说话人 {item['speaker']}：{item['text']}"
+            for item in speaker_segments
+        )
+
+    def _rebuild_transcript_outputs(self, task: dict[str, Any]) -> None:
+        segments = [dict(item) for item in task["results"].get("segments", [])]
+        speaker_segments = [
+            dict(item) for item in task["results"].get("speaker_segments", [])
+        ]
+        for segment in segments:
+            self._ensure_review_defaults(segment)
+        task["results"]["segments"] = segments
+        task["results"]["speaker_segments"] = speaker_segments
+        task["results"]["plain_text"] = self._build_plain_text(segments)
+        task["results"]["speaker_text"] = self._build_speaker_text(speaker_segments)
+        task["results"]["full_text"] = task["results"]["plain_text"]
+
+    def _write_working_results(self, task_id: str, task: dict[str, Any]) -> None:
+        self.store.transcript_path(task_id).write_text(
+            json.dumps(task["results"].get("segments", []), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        self.store.diarization_path(task_id).write_text(
+            json.dumps(
+                task["results"].get("speaker_segments", []),
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    def _sync_speaker_segment_texts(
+        self,
+        transcript_segments: list[dict[str, Any]],
+        speaker_segments: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        synced = [dict(item) for item in speaker_segments]
+        used_indexes: set[int] = set()
+        for segment_index, transcript_segment in enumerate(transcript_segments):
+            match_index = self._match_speaker_segment_index(
+                transcript_segment, synced, segment_index, used_indexes
+            )
+            if match_index is None:
+                continue
+            synced[match_index]["text"] = transcript_segment["text"]
+            used_indexes.add(match_index)
+        return synced
+
+    def _match_speaker_segment_index(
+        self,
+        transcript_segment: dict[str, Any],
+        speaker_segments: list[dict[str, Any]],
+        preferred_index: int,
+        used_indexes: set[int],
+    ) -> int | None:
+        if preferred_index < len(speaker_segments):
+            preferred = speaker_segments[preferred_index]
+            if (
+                abs(float(preferred.get("start", 0.0)) - float(transcript_segment["start"]))
+                < 0.35
+                and abs(float(preferred.get("end", 0.0)) - float(transcript_segment["end"]))
+                < 0.35
+            ):
+                return preferred_index
+
+        best_index: int | None = None
+        best_score: float | None = None
+        for index, speaker_segment in enumerate(speaker_segments):
+            if index in used_indexes:
+                continue
+            score = abs(
+                float(speaker_segment.get("start", 0.0))
+                - float(transcript_segment["start"])
+            ) + abs(
+                float(speaker_segment.get("end", 0.0))
+                - float(transcript_segment["end"])
+            )
+            if best_score is None or score < best_score:
+                best_score = score
+                best_index = index
+        return best_index
 
     def export_task(self, task_id: str, fmt: str) -> dict[str, Any]:
         # 导出始终基于 task.json 当前结果，避免页面状态和文件状态不一致。

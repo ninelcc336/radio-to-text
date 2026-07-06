@@ -479,16 +479,21 @@
         background: #f6ebd8;
       }
 
-      .segment-button.is-active {
+      .segment-card.is-active .segment-button {
         border-color: rgba(163, 70, 47, 0.42);
         background: linear-gradient(135deg, rgba(163, 70, 47, 0.16), rgba(163, 70, 47, 0.04));
         box-shadow: inset 0 0 0 1px rgba(163, 70, 47, 0.08);
       }
 
-      .segment-button.needs-review {
+      .segment-card.needs-review .segment-button {
         border-color: rgba(171, 104, 23, 0.4);
         background: #fffaf2;
         box-shadow: inset 0 0 0 1px rgba(171, 104, 23, 0.08);
+      }
+
+      .segment-card {
+        display: grid;
+        gap: 10px;
       }
 
       .segment-time {
@@ -533,6 +538,74 @@
         line-height: 1.5;
       }
 
+      .segment-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 0 6px 0 106px;
+      }
+
+      .segment-actions button {
+        width: auto;
+        padding: 8px 12px;
+        border-radius: 10px;
+        font-size: 12px;
+      }
+
+      .segment-status-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(106, 100, 88, 0.12);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .segment-status-chip.is-corrected {
+        background: rgba(52, 124, 80, 0.12);
+        color: #2e6b46;
+      }
+
+      .segment-status-chip.is-confirmed {
+        background: rgba(53, 99, 171, 0.12);
+        color: #355aa0;
+      }
+
+      .segment-editor {
+        display: grid;
+        gap: 10px;
+        padding: 0 6px 0 106px;
+      }
+
+      .segment-editor textarea {
+        width: 100%;
+        min-height: 104px;
+        resize: vertical;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fffdf8;
+        color: var(--ink);
+        font-size: 14px;
+        line-height: 1.6;
+        font-family: inherit;
+        outline: none;
+      }
+
+      .segment-editor textarea:focus {
+        border-color: #c78a6c;
+        box-shadow: 0 0 0 3px rgba(199, 138, 108, 0.14);
+      }
+
+      .segment-editor-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
       .empty-state {
         color: var(--muted);
         font-size: 14px;
@@ -547,6 +620,11 @@
         .toolbar-row {
           grid-template-columns: 1fr;
           gap: 8px;
+        }
+
+        .segment-actions,
+        .segment-editor {
+          padding-left: 0;
         }
 
         .segment-button {
@@ -667,11 +745,14 @@
                     >
                       仅看重点
                     </button>
-                    <span id="review-count" class="toolbar-count">重点核对 0</span>
-                  </div>
-                  <div class="toolbar-cluster">
-                    <button id="review-prev-button" class="secondary" type="button">上一条重点</button>
-                    <button id="review-next-button" class="secondary" type="button">下一条重点</button>
+                    <button
+                      id="filter-unprocessed-button"
+                      class="secondary toolbar-toggle"
+                      type="button"
+                    >
+                      仅看未处理
+                    </button>
+                    <span id="review-count" class="toolbar-count">未处理 0</span>
                   </div>
                 </div>
               </div>
