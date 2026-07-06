@@ -21,6 +21,7 @@ class Transcriber:
                 self.config.model_name,
                 device=self.config.device,
                 compute_type=self.config.compute_type,
+                download_root=str(self.config.model_cache_dir),
             )
         return self._model
 

@@ -3,6 +3,7 @@ const fs = require("fs/promises");
 const { pathToFileURL } = require("url");
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { runEngineRequest } = require("./lib/python-engine");
+const { ensureRuntimeDirs, getRuntimePaths } = require("./lib/runtime-paths");
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a"]);
 
@@ -38,16 +39,12 @@ function createWindow() {
   window.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
 
-function workspaceRoot() {
-  return path.resolve(__dirname, "../..");
-}
-
 function isPathInside(parentPath, childPath) {
   const relative = path.relative(parentPath, childPath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-async function resolveTaskAudioSource(payload) {
+async function resolveTaskAudioSource(payload, runtimePaths) {
   const taskId = String(payload?.taskId || "").trim();
   if (!taskId) {
     return {
@@ -56,7 +53,7 @@ async function resolveTaskAudioSource(payload) {
     };
   }
 
-  const tasksDir = path.join(workspaceRoot(), "tasks");
+  const tasksDir = runtimePaths.tasksDir;
   const taskDir = path.join(tasksDir, taskId);
   const sourceDir = path.join(taskDir, "source");
   const candidates = [];
@@ -108,9 +105,16 @@ async function resolveTaskAudioSource(payload) {
 }
 
 app.whenReady().then(() => {
+  const runtimePaths = getRuntimePaths({
+    isPackaged: app.isPackaged,
+    userDataDir: app.getPath("userData"),
+    resourcesPath: process.resourcesPath
+  });
+  ensureRuntimeDirs(runtimePaths);
+
   // 页面所有业务请求都通过一个统一 IPC 通道转发给 Python。
   ipcMain.handle("engine:request", async (_event, request) => {
-    return runEngineRequest(request);
+    return runEngineRequest(request, { runtimePaths });
   });
 
   // 选择音频文件也放在主进程做，避免渲染层直接接触 Node 能力。
@@ -148,7 +152,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("media:resolve-task-audio", async (_event, payload) => {
-    return resolveTaskAudioSource(payload);
+    return resolveTaskAudioSource(payload, runtimePaths);
   });
 
   createWindow();

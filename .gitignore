@@ -1,6 +1,11 @@
 node_modules/
 dist/
+release/
+dist-python/
 __pycache__/
 *.pyc
 tasks/*
 !tasks/.gitkeep
+logs/
+cache/
+build/pyinstaller/

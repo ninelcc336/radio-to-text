@@ -9,9 +9,48 @@
     "start": "set NODE_ENV=production&& .\\node_modules\\electron\\dist\\electron.exe .",
     "smoke": "node app/desktop/scripts/smoke.js",
     "sample": "node app/desktop/scripts/process-sample.js tools/sample-meeting.wav",
-    "engine:health": "python -X utf8 engine/python/main.py"
+    "engine:health": "python -X utf8 engine/python/main.py",
+    "build:engine:deps": "python -m pip install -r requirements-build.txt",
+    "build:engine": "python -m PyInstaller --noconfirm --clean --distpath dist-python --workpath build\\pyinstaller build\\windows\\engine.spec",
+    "build:engine:verify": "node app/desktop/scripts/verify-engine-build.js",
+    "dist:clean": "node app/desktop/scripts/clean-dist-output.js",
+    "dist:win": "npm run build:engine && npm run build:engine:verify && node app/desktop/scripts/clean-dist-output.js release/win-unpacked && electron-builder --config.directories.output=release --win nsis portable",
+    "dist:portable": "npm run build:engine && npm run build:engine:verify && npm run dist:clean && electron-builder --win portable"
   },
   "devDependencies": {
-    "electron": "^37.2.6"
+    "electron": "37.2.6",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.local.radio-to-text",
+    "productName": "radio-to-text",
+    "electronVersion": "37.2.6",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "app/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-python/engine",
+        "to": "engine"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
   }
 }
