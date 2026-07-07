@@ -1,11 +1,14 @@
 const path = require("path");
 const fs = require("fs/promises");
 const { pathToFileURL } = require("url");
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
 const { runEngineRequest } = require("./lib/python-engine");
 const { ensureRuntimeDirs, getRuntimePaths } = require("./lib/runtime-paths");
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a"]);
+const DEFAULT_WINDOW_RATIO = 16 / 9;
+const MIN_WINDOW_WIDTH = 1280;
+const MIN_WINDOW_HEIGHT = Math.round(MIN_WINDOW_WIDTH / DEFAULT_WINDOW_RATIO);
 
 function isDevelopmentMode() {
   // 如果脚本显式传了 NODE_ENV，就优先按脚本意图判断。
@@ -20,9 +23,12 @@ function isDevelopmentMode() {
 // 主窗口只负责承载页面，业务处理统一走本地 Python 引擎。
 function createWindow() {
   const isDev = isDevelopmentMode();
+  const { width, height } = getDefaultWindowSize();
   const window = new BrowserWindow({
-    width: 1100,
-    height: 760,
+    width,
+    height,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     autoHideMenuBar: !isDev,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -37,6 +43,22 @@ function createWindow() {
   }
 
   window.loadFile(path.join(__dirname, "renderer", "index.html"));
+}
+
+function getDefaultWindowSize() {
+  const cursorPoint = screen.getCursorScreenPoint();
+  const currentDisplay = screen.getDisplayNearestPoint(cursorPoint);
+  const { width: workAreaWidth, height: workAreaHeight } = currentDisplay.workAreaSize;
+  const targetWidth = Math.max(Math.round(workAreaWidth * 0.7), MIN_WINDOW_WIDTH);
+  const width = Math.min(targetWidth, workAreaWidth);
+  const height = Math.min(Math.round(width / DEFAULT_WINDOW_RATIO), workAreaHeight);
+  const fittedWidth = Math.round(Math.min(width, height * DEFAULT_WINDOW_RATIO));
+  const fittedHeight = Math.round(fittedWidth / DEFAULT_WINDOW_RATIO);
+
+  return {
+    width: fittedWidth,
+    height: fittedHeight
+  };
 }
 
 function isPathInside(parentPath, childPath) {

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import stat
 import uuid
 from pathlib import Path
 from typing import Any
@@ -84,7 +86,7 @@ class TaskStore:
         task_dir = self.task_dir(task_id)
         if not task_dir.exists():
             raise FileNotFoundError(f"Task not found: {task_id}")
-        shutil.rmtree(task_dir)
+        shutil.rmtree(task_dir, onerror=self._handle_remove_readonly)
 
     def rename_task(self, task_id: str, name: str) -> dict[str, Any]:
         task = self.load_task(task_id)
@@ -124,6 +126,19 @@ class TaskStore:
 
     def _make_task_id(self) -> str:
         return datetime_id() + "-" + uuid.uuid4().hex[:8]
+
+    def _handle_remove_readonly(
+        self,
+        func: Any,
+        target_path: str,
+        exc_info: tuple[type[BaseException], BaseException, Any],
+    ) -> None:
+        error = exc_info[1]
+        if not isinstance(error, PermissionError):
+            raise error
+
+        os.chmod(target_path, stat.S_IWRITE)
+        func(target_path)
 
 
 def datetime_id() -> str:

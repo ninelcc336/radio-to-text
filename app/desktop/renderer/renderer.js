@@ -180,7 +180,7 @@ function renderTask(task) {
         : "-"
     }`,
     `采样率：${metadata.sample_rate || "-"}`,
-    `说话人数：${metadata.speaker_count || "-"}`
+    // `说话人数：${metadata.speaker_count || "-"}`
   ];
 
   detailEl.innerHTML = detailLines.map((line) => `<div>${escapeHtml(line)}</div>`).join("");
