@@ -144,8 +144,11 @@ class ProcessingPipeline:
     ) -> dict[str, Any]:
         task = self.store.load_task(task_id)
         segments = [dict(item) for item in task["results"].get("segments", [])]
-        speaker_segments = [
+        current_speaker_segments = [
             dict(item) for item in task["results"].get("speaker_segments", [])
+        ]
+        raw_speaker_segments = [
+            dict(item) for item in task["results"].get("raw_speaker_segments", [])
         ]
         if not segments:
             raise RuntimeError("No transcript segments available for review")
@@ -170,19 +173,32 @@ class ProcessingPipeline:
             segment["review_status"] = "corrected"
             segment["reviewed_text"] = next_text
             segment["review_updated_at"] = updated_at
+        elif action == "delete":
+            segment["review_status"] = "deleted"
+            segment["review_updated_at"] = updated_at
         else:
             raise RuntimeError(f"Unsupported review action: {review_action}")
 
+        base_speaker_segments = raw_speaker_segments or current_speaker_segments
         task["results"]["segments"] = segments
-        task["results"]["speaker_segments"] = self._sync_speaker_segment_texts(
-            segments, speaker_segments
-        )
+        if any(self._is_deleted_segment(item) for item in segments):
+            task["results"]["speaker_segments"] = self._build_visible_speaker_segments(
+                segments,
+                base_speaker_segments,
+            )
+        else:
+            task["results"]["speaker_segments"] = self._sync_speaker_segment_texts(
+                segments,
+                base_speaker_segments,
+            )
         self._rebuild_transcript_outputs(task)
         self._write_working_results(task_id, task)
 
         segment_start = format_timestamp(segment["start"])
         if action == "confirm":
             self.store.append_log(task, f"已确认片段 {segment_start}。")
+        elif action == "delete":
+            self.store.append_log(task, f"已删除片段 {segment_start}。")
         else:
             self.store.append_log(task, f"已修正片段 {segment_start}。")
 
@@ -228,6 +244,14 @@ class ProcessingPipeline:
         segment.setdefault("reviewed_text", None)
         segment.setdefault("review_updated_at", None)
 
+    def _is_deleted_segment(self, segment: dict[str, Any]) -> bool:
+        return str(segment.get("review_status", "")).strip().lower() == "deleted"
+
+    def _visible_transcript_segments(
+        self, segments: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        return [dict(item) for item in segments if not self._is_deleted_segment(item)]
+
     def _build_plain_text(self, segments: list[dict[str, Any]]) -> str:
         return "\n".join(
             f"[{format_timestamp(item['start'])}] {item['text']}" for item in segments
@@ -246,9 +270,10 @@ class ProcessingPipeline:
         ]
         for segment in segments:
             self._ensure_review_defaults(segment)
+        visible_segments = self._visible_transcript_segments(segments)
         task["results"]["segments"] = segments
         task["results"]["speaker_segments"] = speaker_segments
-        task["results"]["plain_text"] = self._build_plain_text(segments)
+        task["results"]["plain_text"] = self._build_plain_text(visible_segments)
         task["results"]["speaker_text"] = self._build_speaker_text(speaker_segments)
         task["results"]["full_text"] = task["results"]["plain_text"]
 
@@ -282,6 +307,36 @@ class ProcessingPipeline:
             synced[match_index]["text"] = transcript_segment["text"]
             used_indexes.add(match_index)
         return synced
+
+    def _build_visible_speaker_segments(
+        self,
+        transcript_segments: list[dict[str, Any]],
+        speaker_segments: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        visible_speaker_segments: list[dict[str, Any]] = []
+        used_indexes: set[int] = set()
+        for segment_index, transcript_segment in enumerate(transcript_segments):
+            match_index = self._match_speaker_segment_index(
+                transcript_segment,
+                speaker_segments,
+                segment_index,
+                used_indexes,
+            )
+            speaker = ""
+            if match_index is not None:
+                speaker = str(speaker_segments[match_index].get("speaker", "")).strip()
+                used_indexes.add(match_index)
+            if self._is_deleted_segment(transcript_segment):
+                continue
+            visible_speaker_segments.append(
+                {
+                    "start": transcript_segment["start"],
+                    "end": transcript_segment["end"],
+                    "speaker": speaker,
+                    "text": transcript_segment["text"],
+                }
+            )
+        return visible_speaker_segments
 
     def _match_speaker_segment_index(
         self,
@@ -321,8 +376,6 @@ class ProcessingPipeline:
         # 导出始终基于 task.json 当前结果，避免页面状态和文件状态不一致。
         task = self.store.load_task(task_id)
         speaker_segments = task["results"].get("speaker_segments", [])
-        if not speaker_segments:
-            raise RuntimeError("No speaker segments available for export")
 
         export_path = self.store.export_path(task_id, fmt)
         if fmt == "txt":

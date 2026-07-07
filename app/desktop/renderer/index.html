@@ -214,37 +214,124 @@
 
       .summary {
         display: grid;
-        gap: 8px;
+        gap: 14px;
         color: var(--muted);
         font-size: 14px;
         line-height: 1.6;
       }
 
       .status {
-        padding: 12px 14px;
+        display: none;
+        margin-bottom: 14px;
+        padding: 10px 12px;
         border-radius: 12px;
-        background: #f7f1e5;
-        color: var(--muted);
-        display: flex;
-        align-items: center;
+        border: 1px solid #efb1b1;
+        background: #fdecec;
+        color: #982d2d;
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.5;
+      }
+
+      .status.is-visible {
+        display: block;
+      }
+
+      .status.is-hidden {
+        display: none;
+      }
+
+      .task-status-banner {
+        display: grid;
+        gap: 6px;
+        padding: 15px 16px;
+        border-radius: 16px;
+        border: 1px solid transparent;
+      }
+
+      .task-status-banner.is-created,
+      .task-status-banner.is-ready,
+      .task-status-banner.is-unknown {
+        background: linear-gradient(135deg, #fbf4df, #f4e7c8);
+        border-color: #e8d2a3;
+        color: #7d5a17;
+      }
+
+      .task-status-banner.is-processing {
+        background: linear-gradient(135deg, #fff1db, #ffd7ad);
+        border-color: #efb777;
+        color: #9b4c00;
+        box-shadow: 0 10px 22px rgba(198, 119, 28, 0.14);
+      }
+
+      .task-status-banner.is-completed {
+        background: linear-gradient(135deg, #ecf9ee, #d7efd9);
+        border-color: #a2d2aa;
+        color: #1f6b35;
+      }
+
+      .task-status-banner.is-failed {
+        background: linear-gradient(135deg, #ffeded, #f8d4d4);
+        border-color: #e8abab;
+        color: #a02e2e;
+      }
+
+      .task-status-eyebrow {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.78;
+      }
+
+      .task-status-value {
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.2;
+        color: var(--ink);
+      }
+
+      .task-status-banner.is-created .task-status-value,
+      .task-status-banner.is-ready .task-status-value,
+      .task-status-banner.is-unknown .task-status-value,
+      .task-status-banner.is-processing .task-status-value,
+      .task-status-banner.is-completed .task-status-value,
+      .task-status-banner.is-failed .task-status-value {
+        color: inherit;
+      }
+
+      .task-status-stage {
+        font-size: 13px;
+        font-weight: 600;
+        opacity: 0.9;
+      }
+
+      .task-detail-grid {
+        display: grid;
         gap: 10px;
-        min-height: 48px;
       }
 
-      .status::before {
-        content: "";
-        width: 14px;
-        height: 14px;
-        border-radius: 999px;
-        border: 2px solid rgba(163, 70, 47, 0.18);
-        border-top-color: var(--accent);
-        opacity: 0;
-        transform: scale(0.9);
+      .task-detail-row {
+        display: grid;
+        gap: 2px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: #fcf8f0;
+        border: 1px solid rgba(217, 207, 187, 0.68);
       }
 
-      .status.is-loading::before {
-        opacity: 1;
-        animation: spin 0.8s linear infinite;
+      .task-detail-label {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        color: #8b816f;
+      }
+
+      .task-detail-value {
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 600;
+        word-break: break-word;
       }
 
       @keyframes spin {
@@ -685,7 +772,8 @@
         pointer-events: auto;
       }
 
-      .segment-actions button {
+      .segment-actions button,
+      .segment-editor-actions button {
         width: auto;
         min-height: 32px;
         padding: 7px 11px;
@@ -719,6 +807,15 @@
 
       .segment-action-save:hover {
         background: #265339;
+      }
+
+      .segment-action-delete {
+        background: #f8dddd;
+        color: #972f2f;
+      }
+
+      .segment-action-delete:hover {
+        background: #f2caca;
       }
 
       .segment-status-chip {
@@ -811,7 +908,7 @@
       <aside class="sidebar">
         <h1>音频转文本</h1>
         <p class="lede">
-          本地优先桌面原型：导入录音、发起处理、按匿名说话人查看结果，并导出本地纪要。
+          本地优先：导入录音、发起处理、查看结果，并导出本地纪要。
         </p>
         <div class="card stack actions">
           <button id="select-button">选择音频并创建任务</button>
@@ -826,6 +923,7 @@
         </div>
       </aside>
       <main class="content">
+        <div id="status" class="status is-hidden" role="alert" aria-live="assertive"></div>
         <div id="detail-shell" class="detail-shell">
           <div
             id="detail-busy-overlay"
@@ -843,12 +941,6 @@
               <h2>任务信息</h2>
             </div>
             <div id="task-detail" class="summary">尚未选择任务。</div>
-          </section>
-          <section class="card panel">
-            <div class="panel-header">
-              <h2>运行状态</h2>
-            </div>
-            <div id="status" class="status">等待操作</div>
           </section>
           <section class="card panel">
             <div class="panel-header">

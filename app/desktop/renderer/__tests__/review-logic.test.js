@@ -12,6 +12,7 @@ const reviewLogic = require(reviewLogicPath);
 test("exports the expected review logic API in Node", () => {
     assert.equal(typeof reviewLogic.buildSegmentReviewMeta, "function");
     assert.equal(typeof reviewLogic.getReviewStatus, "function");
+    assert.equal(typeof reviewLogic.isDeletedReviewSegment, "function");
     assert.equal(typeof reviewLogic.isPendingReviewSegment, "function");
     assert.equal(typeof reviewLogic.shouldShowConfirmAction, "function");
     assert.equal(typeof reviewLogic.shouldShowConfirmedBadge, "function");
@@ -67,6 +68,26 @@ test("corrected segments do not count as pending or show confirmation UI", () =>
     assert.equal(reviewLogic.shouldShowConfirmedBadge(reviewMeta), false);
 });
 
+test("deleted segments expose explicit delete-state handling", () => {
+    const segment = {
+        needs_review: true,
+        review_status: "deleted",
+        review_reasons: ["duplicate"]
+    };
+    const reviewMeta = reviewLogic.buildSegmentReviewMeta(segment);
+
+    assert.deepEqual(reviewMeta, {
+        reviewStatus: "deleted",
+        needsReview: true,
+        reviewReasons: ["duplicate"]
+    });
+    assert.equal(reviewLogic.isDeletedReviewSegment(segment), true);
+    assert.equal(reviewLogic.isDeletedReviewSegment(reviewMeta), true);
+    assert.equal(reviewLogic.isPendingReviewSegment(reviewMeta), false);
+    assert.equal(reviewLogic.shouldShowConfirmAction(reviewMeta), false);
+    assert.equal(reviewLogic.shouldShowConfirmedBadge(reviewMeta), false);
+});
+
 test("defaults blank review status to pending", () => {
     assert.equal(reviewLogic.getReviewStatus({ review_status: "   " }), "pending");
     assert.equal(reviewLogic.getReviewStatus({}), "pending");
@@ -83,4 +104,5 @@ test("attaches the API to globalThis.reviewLogic when loaded in a browser-like c
     assert.ok(sandbox.globalThis.reviewLogic);
     assert.equal(typeof sandbox.globalThis.reviewLogic.buildSegmentReviewMeta, "function");
     assert.equal(typeof sandbox.globalThis.reviewLogic.getReviewStatus, "function");
+    assert.equal(typeof sandbox.globalThis.reviewLogic.isDeletedReviewSegment, "function");
 });

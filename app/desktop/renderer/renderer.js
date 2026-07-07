@@ -34,6 +34,7 @@ const reviewLogic = globalThis.reviewLogic || {};
 const {
   buildSegmentReviewMeta: buildSegmentReviewMetaFromModule,
   getReviewStatus: getReviewStatusFromModule,
+  isDeletedReviewSegment: isDeletedReviewSegmentFromModule,
   isPendingReviewSegment: isPendingReviewSegmentFromModule,
   shouldShowConfirmAction: shouldShowConfirmActionFromModule
 } = reviewLogic;
@@ -103,10 +104,66 @@ function labelStage(stage) {
   return STAGE_LABELS[stage] || stage || "-";
 }
 
+function taskStatusTone(status) {
+  const toneMap = {
+    created: "created",
+    ready: "ready",
+    processing: "processing",
+    completed: "completed",
+    failed: "failed"
+  };
+  return toneMap[status] || "unknown";
+}
+
+function formatTaskDuration(durationSeconds) {
+  if (typeof durationSeconds !== "number") {
+    return "-";
+  }
+  return `${durationSeconds.toFixed(1)} 秒`;
+}
+
+function renderTaskDetail(task) {
+  const metadata = task.metadata || {};
+  const statusText = labelStatus(task.status);
+  const stageText = labelStage(task.stage);
+  const rows = [
+    ["任务名称", task.name || "未命名任务"],
+    ["任务 ID", task.task_id || "-"],
+    ["阶段", stageText],
+    ["源文件", metadata.original_file_name || task.source_path || "-"],
+    ["时长", formatTaskDuration(metadata.duration_seconds)],
+    ["采样率", metadata.sample_rate || "-"]
+  ];
+
+  const detailRowsHtml = rows
+    .map(
+      ([label, value]) => `
+        <div class="task-detail-row">
+          <div class="task-detail-label">${escapeHtml(label)}</div>
+          <div class="task-detail-value">${escapeHtml(value)}</div>
+        </div>
+      `
+    )
+    .join("");
+
+  return `
+    <div class="task-status-banner is-${taskStatusTone(task.status)}">
+      <div class="task-status-eyebrow">当前状态</div>
+      <div class="task-status-value">${escapeHtml(statusText)}</div>
+      <div class="task-status-stage">阶段：${escapeHtml(stageText)}</div>
+    </div>
+    <div class="task-detail-grid">${detailRowsHtml}</div>
+  `;
+}
+
 function setState(message, payload, options = {}) {
-  statusEl.textContent = message;
+  const isError = options.variant === "error" || payload?.ok === false;
+  const errorMessage = payload?.error ? `${message}：${payload.error}` : message;
+  statusEl.textContent = isError ? errorMessage : "";
   statusEl.dataset.lastPayload = JSON.stringify(payload ?? {});
-  statusEl.classList.toggle("is-loading", Boolean(options.loading));
+  statusEl.classList.toggle("is-visible", isError);
+  statusEl.classList.toggle("is-hidden", !isError);
+  statusEl.classList.toggle("is-loading", false);
 }
 
 function currentTask() {
@@ -192,26 +249,10 @@ function renderTask(task) {
     return;
   }
 
-  const metadata = task.metadata || {};
-  const detailLines = [
-    `任务名称：${task.name || "未命名任务"}`,
-    `任务 ID：${task.task_id}`,
-    `状态：${labelStatus(task.status)}`,
-    `阶段：${labelStage(task.stage)}`,
-    `源文件：${metadata.original_file_name || task.source_path || "-"}`,
-    `时长：${
-      typeof metadata.duration_seconds === "number"
-        ? `${metadata.duration_seconds.toFixed(1)} 秒`
-        : "-"
-    }`,
-    `采样率：${metadata.sample_rate || "-"}`,
-    // `说话人数：${metadata.speaker_count || "-"}`
-  ];
-
-  detailEl.innerHTML = detailLines.map((line) => `<div>${escapeHtml(line)}</div>`).join("");
+  detailEl.innerHTML = renderTaskDetail(task);
 
   const activeTranscript = getActiveTranscriptData(task);
-  const segments = activeTranscript.segments;
+  const segments = getRenderableActiveSegments(task);
   const fullText = activeTranscript.plainText;
   const hasAnyOutput = Boolean(segments.length || fullText.trim());
   outputToolbarEl.classList.toggle("is-hidden", !hasAnyOutput);
@@ -229,6 +270,10 @@ function renderTask(task) {
       } else {
         renderReviewEmptyState("当前文本版本下没有未处理片段。");
       }
+      return;
+    }
+    if (!visibleSegments.length) {
+      renderTranscriptEmpty("当前文本版本下暂无可展示片段。");
       return;
     }
     renderTranscriptSegments(visibleSegments);
@@ -392,6 +437,24 @@ function buildSegmentActions(task, reviewMeta, sourceIndex) {
     beginSegmentEdit(sourceIndex);
   });
   actions.appendChild(editButton);
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "segment-action-delete";
+  deleteButton.textContent = "删除";
+  deleteButton.title = "将这条片段从最终文本中隐藏";
+  deleteButton.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const confirmed = window.confirm(
+      "确认删除这条片段吗？删除后会从最终文本和导出结果中隐藏。"
+    );
+    if (!confirmed) {
+      return;
+    }
+    await submitSegmentReview(sourceIndex, "delete");
+  });
+  actions.appendChild(deleteButton);
   return actions;
 }
 
@@ -706,7 +769,7 @@ function cleanTranscriptLine(line) {
 
 function buildTranscriptLines(task) {
   const activeTranscript = getActiveTranscriptData(task);
-  const segments = activeTranscript.segments || [];
+  const segments = getRenderableActiveSegments(task);
   if (segments.length) {
     return segments.map((segment) => cleanTranscriptLine(segment.text)).filter(Boolean);
   }
@@ -918,6 +981,13 @@ function getReviewStatus(segment) {
   return String(segment?.review_status || "pending").trim() || "pending";
 }
 
+function isDeletedSegment(segment) {
+  if (typeof isDeletedReviewSegmentFromModule === "function") {
+    return isDeletedReviewSegmentFromModule(segment);
+  }
+  return getReviewStatus(segment) === "deleted";
+}
+
 function isPendingReview(segment) {
   return Boolean(segment?.needs_review) && getReviewStatus(segment) === "pending";
 }
@@ -954,13 +1024,20 @@ function getSegmentReviewMeta(task, sourceIndex) {
   return buildSegmentReviewMeta(finalSegment);
 }
 
+function getRenderableActiveSegments(task) {
+  const segments = getActiveTranscriptData(task).segments || [];
+  return segments.filter((segment) => !isDeletedSegment(segment));
+}
+
 function getVisibleTranscriptSegments(task) {
-  const segments = getActiveTranscriptData(task).segments;
-  const entries = segments.map((segment, sourceIndex) => ({
-    segment,
-    sourceIndex,
-    reviewMeta: getSegmentReviewMeta(task, sourceIndex)
-  }));
+  const segments = getActiveTranscriptData(task).segments || [];
+  const entries = segments
+    .map((segment, sourceIndex) => ({
+      segment,
+      sourceIndex,
+      reviewMeta: getSegmentReviewMeta(task, sourceIndex)
+    }))
+    .filter((entry) => !isDeletedSegment(entry.segment));
   if (transcriptViewState.reviewFilter === "review-only") {
     return entries.filter((entry) => isPendingReviewMeta(entry.reviewMeta));
   }
@@ -1017,9 +1094,20 @@ async function submitSegmentReview(sourceIndex, reviewAction, reviewedText = "")
   }
 
   if (reviewAction === "correct" && !String(reviewedText || "").trim()) {
-    setState("保存失败", { ok: false, error: "修正文本不能为空。" });
+    setState("保存失败", { ok: false, error: "修正文本不能为空。" }, { variant: "error" });
     return;
   }
+
+  const pendingMessageMap = {
+    confirm: "正在保存确认结果",
+    correct: "正在保存修正结果",
+    delete: "正在删除片段"
+  };
+  const busyMessageMap = {
+    confirm: "正在确认片段...",
+    correct: "正在保存修正片段...",
+    delete: "正在删除片段..."
+  };
 
   await runRequest(
     {
@@ -1030,10 +1118,10 @@ async function submitSegmentReview(sourceIndex, reviewAction, reviewedText = "")
         reviewAction,
         reviewedText: reviewedText || undefined
       },
-      __lockDetailPane: reviewAction === "confirm",
-      __detailBusyMessage: "正在确认片段..."
+      __lockDetailPane: ["confirm", "correct", "delete"].includes(reviewAction),
+      __detailBusyMessage: busyMessageMap[reviewAction] || "正在保存片段..."
     },
-    reviewAction === "confirm" ? "正在保存确认结果" : "正在保存修正结果"
+    pendingMessageMap[reviewAction] || "正在保存片段结果"
   );
   resetSegmentEditorState(task.task_id);
   rerenderTranscriptView();

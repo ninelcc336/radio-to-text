@@ -14,8 +14,16 @@
 })(
     typeof globalThis !== "undefined" ? globalThis : this,
     function createReviewLogic() {
+        function readReviewStatusValue(segment) {
+            if (segment && typeof segment === "object" && "reviewStatus" in segment) {
+                return segment.reviewStatus;
+            }
+
+            return segment?.review_status;
+        }
+
         function getReviewStatus(segment) {
-            return String(segment?.review_status || "pending").trim() || "pending";
+            return String(readReviewStatusValue(segment) || "pending").trim() || "pending";
         }
 
         function buildSegmentReviewMeta(segment) {
@@ -30,12 +38,16 @@
             };
         }
 
+        function isDeletedReviewSegment(segment) {
+            return getReviewStatus(segment) === "deleted";
+        }
+
         function isPendingReviewSegment(reviewMeta) {
             return Boolean(reviewMeta?.needsReview) && reviewMeta?.reviewStatus === "pending";
         }
 
         function shouldShowConfirmAction(reviewMeta) {
-            return isPendingReviewSegment(reviewMeta);
+            return !isDeletedReviewSegment(reviewMeta) && isPendingReviewSegment(reviewMeta);
         }
 
         function shouldShowConfirmedBadge(reviewMeta) {
@@ -45,6 +57,7 @@
         return {
             buildSegmentReviewMeta,
             getReviewStatus,
+            isDeletedReviewSegment,
             isPendingReviewSegment,
             shouldShowConfirmAction,
             shouldShowConfirmedBadge
