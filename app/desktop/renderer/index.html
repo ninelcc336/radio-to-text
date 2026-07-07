@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>会议录音转文字</title>
+    <title>音频转文本</title>
     <style>
       :root {
         color-scheme: light;
@@ -59,6 +59,60 @@
 
       .content {
         padding: 28px;
+      }
+
+      .detail-shell {
+        position: relative;
+      }
+
+      .detail-shell.is-busy .grid {
+        pointer-events: none;
+        user-select: none;
+      }
+
+      .detail-busy-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(244, 241, 232, 0.74);
+        backdrop-filter: blur(2px);
+      }
+
+      .detail-busy-overlay.is-hidden {
+        display: none;
+      }
+
+      .detail-busy-card {
+        display: grid;
+        gap: 10px;
+        min-width: 220px;
+        padding: 18px 20px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 253, 248, 0.96);
+        box-shadow: 0 18px 40px var(--shadow);
+        text-align: center;
+      }
+
+      .detail-busy-spinner {
+        width: 24px;
+        height: 24px;
+        margin: 0 auto;
+        border-radius: 999px;
+        border: 3px solid rgba(163, 70, 47, 0.18);
+        border-top-color: var(--accent);
+        animation: spin 0.8s linear infinite;
+      }
+
+      .detail-busy-message {
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.5;
       }
 
       h1,
@@ -755,7 +809,7 @@
   <body>
     <div class="shell">
       <aside class="sidebar">
-        <h1>会议录音转文字</h1>
+        <h1>音频转文本</h1>
         <p class="lede">
           本地优先桌面原型：导入录音、发起处理、按匿名说话人查看结果，并导出本地纪要。
         </p>
@@ -772,7 +826,18 @@
         </div>
       </aside>
       <main class="content">
-        <div class="grid">
+        <div id="detail-shell" class="detail-shell">
+          <div
+            id="detail-busy-overlay"
+            class="detail-busy-overlay is-hidden"
+            aria-hidden="true"
+          >
+            <div class="detail-busy-card" role="status" aria-live="polite">
+              <div class="detail-busy-spinner" aria-hidden="true"></div>
+              <div id="detail-busy-message" class="detail-busy-message">正在确认片段...</div>
+            </div>
+          </div>
+          <div class="grid">
           <section class="card panel">
             <div class="panel-header">
               <h2>任务信息</h2>
@@ -910,8 +975,10 @@
             </div>
           </section>
         </div>
+        </div>
       </main>
     </div>
+    <script src="./review-logic.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

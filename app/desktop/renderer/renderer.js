@@ -1,5 +1,8 @@
 const statusEl = document.getElementById("status");
 const detailEl = document.getElementById("task-detail");
+const detailShellEl = document.getElementById("detail-shell");
+const detailBusyOverlayEl = document.getElementById("detail-busy-overlay");
+const detailBusyMessageEl = document.getElementById("detail-busy-message");
 const outputEl = document.getElementById("task-output");
 const outputToolbarEl = document.getElementById("output-toolbar");
 const reviewToolbarEl = document.getElementById("review-toolbar");
@@ -27,6 +30,14 @@ const audioDurationEl = document.getElementById("audio-duration");
 const audioProgressEl = document.getElementById("audio-progress");
 const audioEl = document.getElementById("task-audio");
 
+const reviewLogic = globalThis.reviewLogic || {};
+const {
+  buildSegmentReviewMeta: buildSegmentReviewMetaFromModule,
+  getReviewStatus: getReviewStatusFromModule,
+  isPendingReviewSegment: isPendingReviewSegmentFromModule,
+  shouldShowConfirmAction: shouldShowConfirmActionFromModule
+} = reviewLogic;
+
 let selectedTaskId = null;
 let editingTaskId = null;
 let tasksCache = [];
@@ -46,6 +57,11 @@ const segmentEditorState = {
 
 const exportMenuState = {
   isOpen: false
+};
+
+const reviewBusyState = {
+  active: false,
+  message: "正在确认片段..."
 };
 
 const playerState = {
@@ -122,6 +138,15 @@ function setExportMenuOpen(isOpen) {
   exportDropdownEl.classList.toggle("is-hidden", !exportMenuState.isOpen);
   exportMenuButton.classList.toggle("is-open", exportMenuState.isOpen);
   exportMenuButton.setAttribute("aria-expanded", String(exportMenuState.isOpen));
+}
+
+function setReviewBusyState(isActive, message = "正在确认片段...") {
+  reviewBusyState.active = Boolean(isActive);
+  reviewBusyState.message = message;
+  detailShellEl.classList.toggle("is-busy", reviewBusyState.active);
+  detailBusyOverlayEl.classList.toggle("is-hidden", !reviewBusyState.active);
+  detailBusyOverlayEl.setAttribute("aria-hidden", String(!reviewBusyState.active));
+  detailBusyMessageEl.textContent = reviewBusyState.message;
 }
 
 function resetSegmentEditorState(taskId = null) {
@@ -222,7 +247,9 @@ function renderTask(task) {
 function renderTranscriptToolbar(task) {
   const activeTranscript = getActiveTranscriptData(task);
   const finalSegments = getFinalTranscriptSegments(task);
-  const pendingSegments = finalSegments.filter((segment) => isPendingReview(segment));
+  const pendingSegments = finalSegments
+    .map((segment) => buildSegmentReviewMeta(segment))
+    .filter((reviewMeta) => isPendingReviewMeta(reviewMeta));
   const hasAnyOutput = Boolean(
     activeTranscript.segments.length || activeTranscript.plainText.trim()
   );
@@ -273,7 +300,7 @@ function renderTranscriptSegments(entries) {
     if (sourceIndex === playerState.activeSegmentIndex) {
       card.classList.add("is-active");
     }
-    if (reviewMeta.needsReview && reviewMeta.reviewStatus === "pending") {
+    if (isPendingReviewMeta(reviewMeta)) {
       card.classList.add("needs-review");
     }
 
@@ -310,14 +337,6 @@ function renderTranscriptSegments(entries) {
 }
 
 function renderSegmentReviewBlock(reviewMeta, reviewReasons) {
-  if (reviewMeta.reviewStatus === "confirmed") {
-    return `
-      <span class="segment-review">
-        <span class="segment-status-chip is-confirmed">已确认</span>
-      </span>
-    `;
-  }
-
   if (reviewMeta.reviewStatus === "corrected") {
     return `
       <span class="segment-review">
@@ -326,7 +345,7 @@ function renderSegmentReviewBlock(reviewMeta, reviewReasons) {
     `;
   }
 
-  if (!reviewMeta.needsReview) {
+  if (!isPendingReviewMeta(reviewMeta)) {
     return "";
   }
 
@@ -346,7 +365,7 @@ function buildSegmentActions(task, reviewMeta, sourceIndex) {
   const actions = document.createElement("div");
   actions.className = "segment-actions";
 
-  if (reviewMeta.reviewStatus === "pending") {
+  if (shouldShowConfirmForMeta(reviewMeta)) {
     const confirmButton = document.createElement("button");
     confirmButton.type = "button";
     confirmButton.className = "segment-action-confirm";
@@ -615,9 +634,18 @@ async function runRequest(request, pendingMessage) {
   // 所有按钮行为最终都收敛到这个函数，便于统一处理状态和刷新列表。
   setExportMenuOpen(false);
   setState(pendingMessage, { request }, { loading: true });
+  const shouldLockDetailPane = Boolean(request?.__lockDetailPane);
+  const detailBusyMessage = request?.__detailBusyMessage || "正在确认片段...";
+  if (shouldLockDetailPane) {
+    setReviewBusyState(true, detailBusyMessage);
+  }
 
   try {
-    const response = await window.engineApi.request(request);
+    const safeRequest = { ...request };
+    delete safeRequest.__lockDetailPane;
+    delete safeRequest.__detailBusyMessage;
+
+    const response = await window.engineApi.request(safeRequest);
     setState("请求完成", response);
     if (response.data?.task) {
       selectedTaskId = response.data.task.task_id;
@@ -638,6 +666,10 @@ async function runRequest(request, pendingMessage) {
       error: error.message
     });
     throw error;
+  } finally {
+    if (shouldLockDetailPane) {
+      setReviewBusyState(false);
+    }
   }
 }
 
@@ -880,22 +912,46 @@ function getAlternateTranscriptSegments(task) {
 }
 
 function getReviewStatus(segment) {
+  if (typeof getReviewStatusFromModule === "function") {
+    return getReviewStatusFromModule(segment);
+  }
   return String(segment?.review_status || "pending").trim() || "pending";
 }
 
 function isPendingReview(segment) {
-  return getReviewStatus(segment) === "pending";
+  return Boolean(segment?.needs_review) && getReviewStatus(segment) === "pending";
+}
+
+function buildSegmentReviewMeta(segment) {
+  if (typeof buildSegmentReviewMetaFromModule === "function") {
+    return buildSegmentReviewMetaFromModule(segment);
+  }
+  return {
+    reviewStatus: getReviewStatus(segment),
+    needsReview: Boolean(segment?.needs_review),
+    reviewReasons: Array.isArray(segment?.review_reasons)
+      ? segment.review_reasons.filter(Boolean)
+      : []
+  };
+}
+
+function isPendingReviewMeta(reviewMeta) {
+  if (typeof isPendingReviewSegmentFromModule === "function") {
+    return isPendingReviewSegmentFromModule(reviewMeta);
+  }
+  return Boolean(reviewMeta?.needsReview) && reviewMeta?.reviewStatus === "pending";
+}
+
+function shouldShowConfirmForMeta(reviewMeta) {
+  if (typeof shouldShowConfirmActionFromModule === "function") {
+    return shouldShowConfirmActionFromModule(reviewMeta);
+  }
+  return isPendingReviewMeta(reviewMeta);
 }
 
 function getSegmentReviewMeta(task, sourceIndex) {
   const finalSegment = getFinalTranscriptSegments(task)[sourceIndex] || {};
-  return {
-    reviewStatus: getReviewStatus(finalSegment),
-    needsReview: Boolean(finalSegment?.needs_review),
-    reviewReasons: Array.isArray(finalSegment?.review_reasons)
-      ? finalSegment.review_reasons.filter(Boolean)
-      : []
-  };
+  return buildSegmentReviewMeta(finalSegment);
 }
 
 function getVisibleTranscriptSegments(task) {
@@ -906,12 +962,10 @@ function getVisibleTranscriptSegments(task) {
     reviewMeta: getSegmentReviewMeta(task, sourceIndex)
   }));
   if (transcriptViewState.reviewFilter === "review-only") {
-    return entries.filter(
-      (entry) => entry.reviewMeta.needsReview && entry.reviewMeta.reviewStatus === "pending"
-    );
+    return entries.filter((entry) => isPendingReviewMeta(entry.reviewMeta));
   }
   if (transcriptViewState.reviewFilter === "pending-only") {
-    return entries.filter((entry) => entry.reviewMeta.reviewStatus === "pending");
+    return entries.filter((entry) => isPendingReviewMeta(entry.reviewMeta));
   }
   return entries;
 }
@@ -975,7 +1029,9 @@ async function submitSegmentReview(sourceIndex, reviewAction, reviewedText = "")
         segmentIndex: sourceIndex,
         reviewAction,
         reviewedText: reviewedText || undefined
-      }
+      },
+      __lockDetailPane: reviewAction === "confirm",
+      __detailBusyMessage: "正在确认片段..."
     },
     reviewAction === "confirm" ? "正在保存确认结果" : "正在保存修正结果"
   );
