@@ -8,7 +8,6 @@ const outputToolbarEl = document.getElementById("output-toolbar");
 const reviewToolbarEl = document.getElementById("review-toolbar");
 const taskListEl = document.getElementById("task-list");
 const selectButton = document.getElementById("select-button");
-const processButton = document.getElementById("process-button");
 const refreshButton = document.getElementById("refresh-button");
 const copyOutputButton = document.getElementById("copy-output-button");
 const saveOutputButton = document.getElementById("save-output-button");
@@ -38,6 +37,11 @@ const {
   isPendingReviewSegment: isPendingReviewSegmentFromModule,
   shouldShowConfirmAction: shouldShowConfirmActionFromModule
 } = reviewLogic;
+const taskProcessingLogic = globalThis.taskProcessingLogic || {};
+const {
+  buildProcessingOverlayMessage: buildProcessingOverlayMessageFromModule,
+  shouldShowProcessAction: shouldShowProcessActionFromModule
+} = taskProcessingLogic;
 
 let selectedTaskId = null;
 let editingTaskId = null;
@@ -126,10 +130,17 @@ function renderTaskDetail(task) {
   const metadata = task.metadata || {};
   const statusText = labelStatus(task.status);
   const stageText = labelStage(task.stage);
+  const actionHtml = shouldShowProcessAction(task)
+    ? `
+      <div class="task-status-actions">
+        <button id="detail-process-button" type="button">转录文本</button>
+      </div>
+    `
+    : "";
   const rows = [
     ["任务名称", task.name || "未命名任务"],
     ["任务 ID", task.task_id || "-"],
-    ["阶段", stageText],
+    // ["阶段", stageText],
     ["源文件", metadata.original_file_name || task.source_path || "-"],
     ["时长", formatTaskDuration(metadata.duration_seconds)],
     ["采样率", metadata.sample_rate || "-"]
@@ -151,6 +162,7 @@ function renderTaskDetail(task) {
       <div class="task-status-eyebrow">当前状态</div>
       <div class="task-status-value">${escapeHtml(statusText)}</div>
       <div class="task-status-stage">阶段：${escapeHtml(stageText)}</div>
+      ${actionHtml}
     </div>
     <div class="task-detail-grid">${detailRowsHtml}</div>
   `;
@@ -200,10 +212,42 @@ function setExportMenuOpen(isOpen) {
 function setReviewBusyState(isActive, message = "正在确认片段...") {
   reviewBusyState.active = Boolean(isActive);
   reviewBusyState.message = message;
-  detailShellEl.classList.toggle("is-busy", reviewBusyState.active);
-  detailBusyOverlayEl.classList.toggle("is-hidden", !reviewBusyState.active);
-  detailBusyOverlayEl.setAttribute("aria-hidden", String(!reviewBusyState.active));
-  detailBusyMessageEl.textContent = reviewBusyState.message;
+  syncDetailBusyState();
+}
+
+function applyDetailBusyState(isActive, message = "正在确认片段...") {
+  detailShellEl.classList.toggle("is-busy", isActive);
+  detailBusyOverlayEl.classList.toggle("is-hidden", !isActive);
+  detailBusyOverlayEl.setAttribute("aria-hidden", String(!isActive));
+  detailBusyMessageEl.textContent = message;
+}
+
+function shouldShowProcessAction(task) {
+  if (typeof shouldShowProcessActionFromModule === "function") {
+    return shouldShowProcessActionFromModule(task);
+  }
+  return ["created", "ready"].includes(String(task?.status || "").trim());
+}
+
+function buildProcessingOverlayMessage(task) {
+  if (typeof buildProcessingOverlayMessageFromModule === "function") {
+    return buildProcessingOverlayMessageFromModule(task);
+  }
+  return "正在处理任务...";
+}
+
+function syncDetailBusyState(task = currentTask()) {
+  if (reviewBusyState.active) {
+    applyDetailBusyState(true, reviewBusyState.message);
+    return;
+  }
+
+  if (task?.status === "processing") {
+    applyDetailBusyState(true, buildProcessingOverlayMessage(task));
+    return;
+  }
+
+  applyDetailBusyState(false);
 }
 
 function resetSegmentEditorState(taskId = null) {
@@ -231,6 +275,7 @@ async function syncTaskDetailFromCache() {
 
 async function syncTaskView(task) {
   renderTask(task);
+  syncDetailBusyState(task);
   await syncTaskAudio(task);
 }
 
@@ -241,8 +286,9 @@ function renderTask(task) {
 
   if (!task) {
     detailEl.textContent = "尚未选择任务。";
+    syncDetailBusyState(null);
     reviewToolbarEl.classList.add("is-hidden");
-    renderTranscriptEmpty("尚无转写结果。");
+    renderTranscriptEmpty("尚无转写结果");
     outputToolbarEl.classList.add("is-hidden");
     setExportMenuOpen(false);
     saveMdButton.disabled = true;
@@ -250,6 +296,12 @@ function renderTask(task) {
   }
 
   detailEl.innerHTML = renderTaskDetail(task);
+  const detailProcessButton = document.getElementById("detail-process-button");
+  if (detailProcessButton) {
+    detailProcessButton.addEventListener("click", async () => {
+      await runCurrentTaskProcessing();
+    });
+  }
 
   const activeTranscript = getActiveTranscriptData(task);
   const segments = getRenderableActiveSegments(task);
@@ -286,7 +338,7 @@ function renderTask(task) {
     return;
   }
 
-  renderTranscriptEmpty("尚无转写结果。");
+  renderTranscriptEmpty("尚无转写结果");
 }
 
 function renderTranscriptToolbar(task) {
@@ -709,10 +761,11 @@ async function runRequest(request, pendingMessage) {
     delete safeRequest.__detailBusyMessage;
 
     const response = await window.engineApi.request(safeRequest);
+    const nextTask = response.data?.task || null;
     setState("请求完成", response);
-    if (response.data?.task) {
-      selectedTaskId = response.data.task.task_id;
-      upsertTask(response.data.task);
+    if (nextTask) {
+      selectedTaskId = nextTask.task_id;
+      upsertTask(nextTask);
     }
     if (response.action === "delete_task" && response.data?.taskId) {
       removeTask(response.data.taskId);
@@ -721,7 +774,11 @@ async function runRequest(request, pendingMessage) {
       }
     }
     renderTaskList(tasksCache);
-    await syncTaskDetailFromCache();
+    if (nextTask) {
+      await syncTaskView(nextTask);
+    } else {
+      await syncTaskDetailFromCache();
+    }
     return response;
   } catch (error) {
     setState("请求失败", {
@@ -758,6 +815,25 @@ function upsertTask(task) {
 
 function removeTask(taskId) {
   tasksCache = tasksCache.filter((task) => task.task_id !== taskId);
+}
+
+async function runCurrentTaskProcessing() {
+  if (!selectedTaskId) {
+    setState("未选择任务", { ok: false, error: "请先选择或创建任务。" }, { variant: "error" });
+    return;
+  }
+
+  await runRequest(
+    {
+      action: "process_task",
+      payload: {
+        taskId: selectedTaskId
+      },
+      __lockDetailPane: true,
+      __detailBusyMessage: "正在处理任务..."
+    },
+    "正在处理任务"
+  );
 }
 
 function cleanTranscriptLine(line) {
@@ -1131,6 +1207,7 @@ function rerenderTranscriptView() {
   setExportMenuOpen(false);
   const task = currentTask();
   renderTask(task);
+  syncDetailBusyState(task);
   syncActiveSegmentWithTime();
   updatePlayerUI();
 }
@@ -1198,23 +1275,6 @@ selectButton.addEventListener("click", async () => {
       }
     },
     "正在导入音频"
-  );
-});
-
-processButton.addEventListener("click", async () => {
-  if (!selectedTaskId) {
-    setState("未选择任务", { ok: false, error: "请先选择或创建任务。" });
-    return;
-  }
-
-  await runRequest(
-    {
-      action: "process_task",
-      payload: {
-        taskId: selectedTaskId
-      }
-    },
-    "正在处理任务"
   );
 });
 

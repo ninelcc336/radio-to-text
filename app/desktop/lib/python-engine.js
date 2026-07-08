@@ -40,7 +40,12 @@ function runEngineRequest(request, options = {}) {
         RTT_ROOT_DIR: runtimePaths.rootDir,
         RTT_TASKS_DIR: runtimePaths.tasksDir,
         RTT_LOG_DIR: runtimePaths.logsDir,
-        RTT_MODEL_CACHE_DIR: runtimePaths.modelCacheDir
+        RTT_CACHE_ROOT_DIR: runtimePaths.cacheRootDir,
+        RTT_MODEL_CACHE_DIR: runtimePaths.modelCacheDir,
+        HF_HOME: runtimePaths.huggingfaceHomeDir,
+        HUGGINGFACE_HUB_CACHE: runtimePaths.modelCacheDir,
+        TRANSFORMERS_CACHE: runtimePaths.modelCacheDir,
+        XDG_CACHE_HOME: runtimePaths.cacheRootDir
       }
     });
 

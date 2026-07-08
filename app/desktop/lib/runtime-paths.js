@@ -21,9 +21,17 @@ function getRuntimePaths(options = {}) {
   const rootDir = resolvePathOverride("RTT_ROOT_DIR", defaultRootDir);
   const tasksDir = resolvePathOverride("RTT_TASKS_DIR", path.join(rootDir, "tasks"));
   const logsDir = resolvePathOverride("RTT_LOG_DIR", path.join(rootDir, "logs"));
+  const cacheRootDir = resolvePathOverride(
+    "RTT_CACHE_ROOT_DIR",
+    path.join(rootDir, "cache")
+  );
   const modelCacheDir = resolvePathOverride(
     "RTT_MODEL_CACHE_DIR",
-    path.join(rootDir, "cache", "models")
+    path.join(cacheRootDir, "models")
+  );
+  const huggingfaceHomeDir = resolvePathOverride(
+    "HF_HOME",
+    path.join(cacheRootDir, "huggingface")
   );
   const engineEntry = isPackaged
     ? path.join(options.resourcesPath || process.resourcesPath || workspaceRoot(), "engine", "engine.exe")
@@ -34,7 +42,9 @@ function getRuntimePaths(options = {}) {
     rootDir,
     tasksDir,
     logsDir,
+    cacheRootDir,
     modelCacheDir,
+    huggingfaceHomeDir,
     engineEntry
   };
 }
@@ -44,7 +54,9 @@ function ensureRuntimeDirs(runtimePaths) {
     runtimePaths.rootDir,
     runtimePaths.tasksDir,
     runtimePaths.logsDir,
-    runtimePaths.modelCacheDir
+    runtimePaths.cacheRootDir,
+    runtimePaths.modelCacheDir,
+    runtimePaths.huggingfaceHomeDir
   ]) {
     fs.mkdirSync(target, { recursive: true });
   }

@@ -10,7 +10,9 @@ class EngineConfig:
     root_dir: Path
     tasks_dir: Path
     logs_dir: Path
+    cache_root_dir: Path
     model_cache_dir: Path
+    huggingface_home_dir: Path
     term_replacements_path: Path
     audio_enhance_enabled: bool
     loudness_normalization_enabled: bool
@@ -84,13 +86,22 @@ def load_config() -> EngineConfig:
     root_dir = resolve_path_env("RTT_ROOT_DIR", Path(__file__).resolve().parents[3])
     tasks_dir = resolve_path_env("RTT_TASKS_DIR", root_dir / "tasks")
     logs_dir = resolve_path_env("RTT_LOG_DIR", root_dir / "logs")
+    cache_root_dir = resolve_path_env("RTT_CACHE_ROOT_DIR", root_dir / "cache")
     model_cache_dir = resolve_path_env(
-        "RTT_MODEL_CACHE_DIR", root_dir / "cache" / "models"
+        "RTT_MODEL_CACHE_DIR", cache_root_dir / "models"
     )
+    huggingface_home_dir = resolve_path_env("HF_HOME", cache_root_dir / "huggingface")
     term_replacements_path = resolve_path_env(
         "RTT_TERM_REPLACEMENTS_PATH", root_dir / "tools" / "term-replacements.json"
     )
-    for directory in (root_dir, tasks_dir, logs_dir, model_cache_dir):
+    for directory in (
+        root_dir,
+        tasks_dir,
+        logs_dir,
+        cache_root_dir,
+        model_cache_dir,
+        huggingface_home_dir,
+    ):
         directory.mkdir(parents=True, exist_ok=True)
 
     accuracy_profile = os.getenv("RTT_ASR_ACCURACY_PROFILE", "balanced")
@@ -108,7 +119,9 @@ def load_config() -> EngineConfig:
         root_dir=root_dir,
         tasks_dir=tasks_dir,
         logs_dir=logs_dir,
+        cache_root_dir=cache_root_dir,
         model_cache_dir=model_cache_dir,
+        huggingface_home_dir=huggingface_home_dir,
         term_replacements_path=term_replacements_path,
         audio_enhance_enabled=resolve_bool_env("RTT_AUDIO_ENHANCE_ENABLED", False),
         loudness_normalization_enabled=resolve_bool_env(

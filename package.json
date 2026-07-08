@@ -9,6 +9,7 @@
     "start": "set NODE_ENV=production&& .\\node_modules\\electron\\dist\\electron.exe .",
     "smoke": "node app/desktop/scripts/smoke.js",
     "sample": "node app/desktop/scripts/process-sample.js tools/sample-meeting.wav",
+    "model:consolidate": "node tools/migrate-model-cache.js",
     "engine:health": "python -X utf8 engine/python/main.py",
     "build:engine:deps": "python -m pip install -r requirements-build.txt",
     "build:engine": "python -m PyInstaller --noconfirm --clean --distpath dist-python --workpath build\\pyinstaller build\\windows\\engine.spec",

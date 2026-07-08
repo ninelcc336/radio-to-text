@@ -242,6 +242,7 @@
       }
 
       .task-status-banner {
+        position: relative;
         display: grid;
         gap: 6px;
         padding: 15px 16px;
@@ -262,6 +263,16 @@
         border-color: #efb777;
         color: #9b4c00;
         box-shadow: 0 10px 22px rgba(198, 119, 28, 0.14);
+      }
+
+      .task-status-banner.is-processing::after {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border-radius: 16px;
+        border: 1px solid rgba(239, 183, 119, 0.55);
+        animation: processingPulse 1.4s ease-in-out infinite;
+        pointer-events: none;
       }
 
       .task-status-banner.is-completed {
@@ -306,6 +317,19 @@
         opacity: 0.9;
       }
 
+      .task-status-actions {
+        display: flex;
+        justify-content: flex-start;
+        margin-top: 6px;
+      }
+
+      .task-status-actions button {
+        width: auto;
+        min-height: 36px;
+        padding: 9px 14px;
+        border-radius: 999px;
+      }
+
       .task-detail-grid {
         display: grid;
         gap: 10px;
@@ -340,6 +364,18 @@
         }
         to {
           transform: rotate(360deg);
+        }
+      }
+
+      @keyframes processingPulse {
+        0% {
+          opacity: 0.35;
+        }
+        50% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0.35;
         }
       }
 
@@ -912,7 +948,6 @@
         </p>
         <div class="card stack actions">
           <button id="select-button">选择音频并创建任务</button>
-          <button id="process-button" class="secondary">处理当前任务</button>
           <button id="refresh-button" class="secondary">刷新任务列表</button>
         </div>
         <div class="card panel" style="margin-top: 12px;">
@@ -968,7 +1003,7 @@
                   value="0"
                   disabled
                 />
-                <div class="player-hint">支持拖动与点击进度条，适合边听边核对句子。</div>
+                <div class="player-hint">支持拖动与点击进度条，适合边听边核对句子</div>
               </div>
               <audio id="task-audio" preload="metadata"></audio>
             </div>
@@ -1063,7 +1098,7 @@
               </div>
             </div>
             <div class="output-frame">
-              <div id="task-output" class="empty-state">尚无转写结果。</div>
+              <div id="task-output" class="empty-state">尚无转写结果</div>
             </div>
           </section>
         </div>
@@ -1071,6 +1106,7 @@
       </main>
     </div>
     <script src="./review-logic.js"></script>
+    <script src="./task-processing-logic.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

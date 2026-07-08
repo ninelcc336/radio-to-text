@@ -16,15 +16,25 @@ class ProcessingPipelineReviewActionsTest(unittest.TestCase):
         root_dir = Path(self.temp_dir.name)
         tasks_dir = root_dir / "tasks"
         logs_dir = root_dir / "logs"
+        cache_root_dir = root_dir / "cache"
         model_cache_dir = root_dir / "cache" / "models"
-        for directory in (tasks_dir, logs_dir, model_cache_dir):
+        huggingface_home_dir = cache_root_dir / "huggingface"
+        for directory in (
+            tasks_dir,
+            logs_dir,
+            cache_root_dir,
+            model_cache_dir,
+            huggingface_home_dir,
+        ):
             directory.mkdir(parents=True, exist_ok=True)
 
         self.config = EngineConfig(
             root_dir=root_dir,
             tasks_dir=tasks_dir,
             logs_dir=logs_dir,
+            cache_root_dir=cache_root_dir,
             model_cache_dir=model_cache_dir,
+            huggingface_home_dir=huggingface_home_dir,
             term_replacements_path=root_dir / "tools" / "term-replacements.json",
             audio_enhance_enabled=False,
             loudness_normalization_enabled=True,
