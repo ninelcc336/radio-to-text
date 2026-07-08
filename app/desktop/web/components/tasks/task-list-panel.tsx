@@ -128,8 +128,8 @@ export function TaskListPanel() {
           </div>
         ) : null}
 
-        <ScrollArea className="min-h-0 flex-1 pr-3">
-          <div className="space-y-3">
+        <ScrollArea className="min-h-0 flex-1 pr-1">
+          <div className="space-y-3 pr-4">
             {visibleTasks.map((task) => (
               <TaskListItem
                 isActive={selectedTaskId === task.task_id}

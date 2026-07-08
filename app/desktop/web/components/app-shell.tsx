@@ -67,7 +67,7 @@ function NavigationLink({ href, label, icon, active }: NavigationItem) {
 export function AppShell({ eyebrow, title, description, sidebar, children }: AppShellProps) {
   return (
     <div className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[minmax(360px,400px)_minmax(0,1fr)]">
         <Card className="overflow-hidden border-border/80 bg-white/70 shadow-[0_24px_80px_rgba(82,54,17,0.14)] backdrop-blur">
           <CardContent className="flex h-full flex-col gap-6 p-5">
             <div className="rounded-[1.6rem] border border-border/70 bg-[linear-gradient(160deg,rgba(247,241,229,0.94),rgba(233,220,198,0.82))] p-5">

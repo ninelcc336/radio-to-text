@@ -19,7 +19,7 @@ import { getDesktopApi } from "../../../lib/desktop-api";
 import { bindPlayerStoreApi } from "../../../stores/player-store";
 import {
   bindTaskDetailStoreApi,
-  useTaskDetailStore
+  useTaskDetailStore,
 } from "../../../stores/task-detail-store";
 import { bindTasksStoreApi, useTasksStore } from "../../../stores/tasks-store";
 
@@ -82,7 +82,12 @@ function TaskDetailPageContent({ taskId }: { taskId: string }) {
       title="任务详情"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button asChild className="rounded-full" variant="outline">
+        <Button
+          asChild
+          className="rounded-full"
+          variant="outline"
+          style={{ opacity: 0 }}
+        >
           <Link href={"/" as Route}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             返回任务列表
@@ -93,7 +98,9 @@ function TaskDetailPageContent({ taskId }: { taskId: string }) {
 
       {error ? (
         <Card className="rounded-[1.5rem] border-destructive/30 bg-destructive/10">
-          <CardContent className="p-5 text-sm text-destructive">{error}</CardContent>
+          <CardContent className="p-5 text-sm text-destructive">
+            {error}
+          </CardContent>
         </Card>
       ) : null}
 
@@ -114,7 +121,7 @@ function TaskDetailPageContent({ taskId }: { taskId: string }) {
           {isLoading && !task ? (
             <Card className="rounded-[1.6rem] border-border/70 bg-white/75">
               <CardContent className="p-5 text-sm text-muted-foreground">
-                正在加载任务详情与可播放资源。
+                正在加载任务详情与可播放资源
               </CardContent>
             </Card>
           ) : null}
