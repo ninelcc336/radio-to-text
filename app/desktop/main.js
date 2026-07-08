@@ -4,7 +4,11 @@ const { pathToFileURL } = require("url");
 const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
 const { runEngineRequest } = require("./lib/python-engine");
 const { startNextServer, waitForUrl } = require("./lib/next-server");
-const { ensureRuntimeDirs, getRuntimePaths } = require("./lib/runtime-paths");
+const {
+  ensureRuntimeDirs,
+  getRuntimePaths,
+  getWebRuntimePaths
+} = require("./lib/runtime-paths");
 const { createSettingsStore } = require("./lib/settings-store");
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a"]);
@@ -26,6 +30,14 @@ function isDevelopmentMode() {
   return !app.isPackaged;
 }
 
+function isSmokeTestMode() {
+  return process.env.RTT_SMOKE_TEST === "1";
+}
+
+function shouldRequireNextRenderer() {
+  return process.env.RTT_REQUIRE_NEXT_RENDERER === "1";
+}
+
 async function disposeActiveWebServer() {
   if (!activeWebServer) {
     return;
@@ -45,10 +57,10 @@ async function loadLegacyRenderer(window) {
 }
 
 async function findStandaloneWebDir() {
-  const candidates = [
-    path.join(process.resourcesPath, "web"),
-    path.join(__dirname, "web", ".next", "standalone")
-  ];
+  const webPaths = getWebRuntimePaths({
+    resourcesPath: process.resourcesPath
+  });
+  const candidates = [webPaths.packagedStandaloneDir, webPaths.workspaceStandaloneDir];
 
   for (const candidate of candidates) {
     try {
@@ -70,6 +82,9 @@ async function loadRenderer(window) {
       await window.loadURL(devUrl);
       return;
     } catch (error) {
+      if (shouldRequireNextRenderer()) {
+        throw error;
+      }
       console.warn(`[desktop] Next dev server unavailable, fallback to legacy renderer: ${error.message}`);
     }
   } else {
@@ -84,13 +99,58 @@ async function loadRenderer(window) {
         await window.loadURL(activeWebServer.url);
         return;
       } catch (error) {
+        if (shouldRequireNextRenderer()) {
+          throw error;
+        }
         console.warn(`[desktop] Next standalone unavailable, fallback to legacy renderer: ${error.message}`);
         await disposeActiveWebServer();
       }
+    } else if (shouldRequireNextRenderer()) {
+      throw new Error("Next standalone build not found.");
     }
   }
 
   await loadLegacyRenderer(window);
+}
+
+async function runSmokeAssertions(window) {
+  const details = await window.webContents.executeJavaScript(
+    `
+      (async () => {
+        const hasDesktopApi = Boolean(window.desktopApi);
+        const hasTaskList = typeof window.desktopApi?.tasks?.list === "function";
+        const hasEngineHealth = typeof window.desktopApi?.engine?.health === "function";
+        const hasSettingsGet = typeof window.desktopApi?.settings?.get === "function";
+        const settings = hasSettingsGet ? await window.desktopApi.settings.get() : null;
+
+        return {
+          href: window.location.href,
+          hasDesktopApi,
+          hasTaskList,
+          hasEngineHealth,
+          hasSettingsGet,
+          settingsLoaded: Boolean(settings && typeof settings === "object")
+        };
+      })();
+    `,
+    true
+  );
+
+  if (!details.hasDesktopApi) {
+    throw new Error("desktopApi bridge not found");
+  }
+
+  if (!details.hasTaskList || !details.hasEngineHealth) {
+    throw new Error("desktopApi bridge is incomplete");
+  }
+
+  if (!details.href.startsWith("http://127.0.0.1:")) {
+    throw new Error(`unexpected renderer URL: ${details.href}`);
+  }
+
+  if (!details.hasSettingsGet || !details.settingsLoaded) {
+    throw new Error("desktopApi.settings.get() did not return settings");
+  }
 }
 
 // 主窗口只负责承载页面，业务处理统一走本地 Python 引擎。
@@ -268,7 +328,14 @@ app.whenReady().then(async () => {
     return settingsStore.set(payload);
   });
 
-  await createWindow();
+  const window = await createWindow();
+
+  if (isSmokeTestMode()) {
+    await runSmokeAssertions(window);
+    await disposeActiveWebServer();
+    app.quit();
+    return;
+  }
 
   // macOS 上关闭窗口后保留应用，重新激活时再创建新窗口。
   app.on("activate", () => {
@@ -276,6 +343,9 @@ app.whenReady().then(async () => {
       void createWindow();
     }
   });
+}).catch((error) => {
+  console.error(error.stack || error.message);
+  app.exit(1);
 });
 
 app.on("before-quit", () => {

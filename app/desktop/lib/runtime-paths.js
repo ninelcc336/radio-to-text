@@ -13,6 +13,30 @@ function resolvePathOverride(envName, fallbackPath) {
   return path.resolve(rawValue);
 }
 
+function getWebRuntimePaths(options = {}) {
+  const resourcesRoot = path.resolve(
+    options.resourcesPath || process.resourcesPath || workspaceRoot()
+  );
+  const workspaceWebDir = path.join(workspaceRoot(), "app", "desktop", "web");
+  const packagedWebDir = path.join(resourcesRoot, "web");
+
+  return {
+    workspaceWebDir,
+    workspaceStandaloneDir: path.join(
+      workspaceWebDir,
+      ".next",
+      "standalone",
+      "app",
+      "desktop",
+      "web"
+    ),
+    workspaceStaticDir: path.join(workspaceWebDir, ".next", "static"),
+    packagedWebDir,
+    packagedStandaloneDir: packagedWebDir,
+    packagedStaticDir: path.join(packagedWebDir, ".next", "static")
+  };
+}
+
 function getRuntimePaths(options = {}) {
   const isPackaged = Boolean(options.isPackaged);
   const defaultRootDir = isPackaged
@@ -65,5 +89,6 @@ function ensureRuntimeDirs(runtimePaths) {
 module.exports = {
   ensureRuntimeDirs,
   getRuntimePaths,
+  getWebRuntimePaths,
   workspaceRoot
 };

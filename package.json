@@ -20,7 +20,7 @@
     "build:engine:verify": "node app/desktop/scripts/verify-engine-build.js",
     "dist:clean": "node app/desktop/scripts/clean-dist-output.js",
     "dist:win": "npm run build:web && npm run build:engine && npm run build:engine:verify && node app/desktop/scripts/clean-dist-output.js release/win-unpacked && electron-builder --config.directories.output=release --win nsis portable",
-    "dist:portable": "npm run build:engine && npm run build:engine:verify && npm run dist:clean && electron-builder --win portable"
+    "dist:portable": "npm run build:web && npm run build:engine && npm run build:engine:verify && npm run dist:clean && electron-builder --win portable"
   },
   "devDependencies": {
     "electron": "37.2.6",
@@ -36,12 +36,22 @@
     },
     "files": [
       "app/**/*",
+      "!app/desktop/web/.next{,/**/*}",
+      "!app/desktop/web/node_modules{,/**/*}",
       "package.json"
     ],
     "extraResources": [
       {
         "from": "dist-python/engine",
         "to": "engine"
+      },
+      {
+        "from": "app/desktop/web/.next/standalone/app/desktop/web",
+        "to": "web"
+      },
+      {
+        "from": "app/desktop/web/.next/static",
+        "to": "web/.next/static"
       }
     ],
     "win": {
