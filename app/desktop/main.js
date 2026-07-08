@@ -5,6 +5,7 @@ const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
 const { runEngineRequest } = require("./lib/python-engine");
 const { startNextServer, waitForUrl } = require("./lib/next-server");
 const { ensureRuntimeDirs, getRuntimePaths } = require("./lib/runtime-paths");
+const { createSettingsStore } = require("./lib/settings-store");
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a"]);
 const DEFAULT_WINDOW_RATIO = 16 / 9;
@@ -214,6 +215,7 @@ app.whenReady().then(async () => {
     resourcesPath: process.resourcesPath
   });
   ensureRuntimeDirs(runtimePaths);
+  const settingsStore = createSettingsStore(path.join(app.getPath("userData"), "settings.json"));
 
   // 页面所有业务请求都通过一个统一 IPC 通道转发给 Python。
   ipcMain.handle("engine:request", async (_event, request) => {
@@ -256,6 +258,14 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("media:resolve-task-audio", async (_event, payload) => {
     return resolveTaskAudioSource(payload, runtimePaths);
+  });
+
+  ipcMain.handle("settings:get", async () => {
+    return settingsStore.get();
+  });
+
+  ipcMain.handle("settings:set", async (_event, payload) => {
+    return settingsStore.set(payload);
   });
 
   await createWindow();
