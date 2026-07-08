@@ -6,6 +6,7 @@ const enginePath = path.resolve(__dirname, "../../../dist-python/engine/engine.e
 const webPaths = getWebRuntimePaths();
 const standaloneServerPath = path.join(webPaths.workspaceStandaloneDir, "server.js");
 const staticDirPath = webPaths.workspaceStaticDir;
+const standaloneStaticDirPath = webPaths.workspaceStandaloneStaticDir;
 
 if (!fs.existsSync(enginePath)) {
   console.error(`Python engine build is missing: ${enginePath}`);
@@ -22,6 +23,12 @@ if (!fs.existsSync(staticDirPath)) {
   process.exit(1);
 }
 
+if (!fs.existsSync(standaloneStaticDirPath)) {
+  console.error(`Next standalone static assets are missing: ${standaloneStaticDirPath}`);
+  process.exit(1);
+}
+
 console.log(`Verified Python engine build: ${enginePath}`);
 console.log(`Verified Next standalone build: ${standaloneServerPath}`);
 console.log(`Verified Next static assets: ${staticDirPath}`);
+console.log(`Verified Next standalone static assets: ${standaloneStaticDirPath}`);

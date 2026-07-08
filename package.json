@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "set NODE_ENV=development&& .\\node_modules\\electron\\dist\\electron.exe .",
     "dev:web": "npm --prefix app/desktop/web run dev",
-    "build:web": "npm --prefix app/desktop/web run build",
+    "build:web": "npm --prefix app/desktop/web run build && node app/desktop/scripts/sync-next-standalone-assets.js",
     "start:web": "npm --prefix app/desktop/web run start",
     "dev:desktop": "set NODE_ENV=development&& .\\node_modules\\electron\\dist\\electron.exe .",
     "start": "set NODE_ENV=production&& .\\node_modules\\electron\\dist\\electron.exe .",

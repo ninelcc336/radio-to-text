@@ -31,6 +31,16 @@ function getWebRuntimePaths(options = {}) {
       "web"
     ),
     workspaceStaticDir: path.join(workspaceWebDir, ".next", "static"),
+    workspaceStandaloneStaticDir: path.join(
+      workspaceWebDir,
+      ".next",
+      "standalone",
+      "app",
+      "desktop",
+      "web",
+      ".next",
+      "static"
+    ),
     packagedWebDir,
     packagedStandaloneDir: packagedWebDir,
     packagedStaticDir: path.join(packagedWebDir, ".next", "static")

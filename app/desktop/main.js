@@ -65,6 +65,7 @@ async function findStandaloneWebDir() {
   for (const candidate of candidates) {
     try {
       await fs.access(path.join(candidate, "server.js"));
+      await fs.access(path.join(candidate, ".next", "static"));
       return candidate;
     } catch (_error) {
       // 当前候选不存在时继续尝试下一个。
@@ -122,6 +123,28 @@ async function runSmokeAssertions(window) {
         const hasEngineHealth = typeof window.desktopApi?.engine?.health === "function";
         const hasSettingsGet = typeof window.desktopApi?.settings?.get === "function";
         const settings = hasSettingsGet ? await window.desktopApi.settings.get() : null;
+        const stylesheetLinks = Array.from(
+          document.querySelectorAll('link[rel="stylesheet"]')
+        ).map((node) => node.href);
+        const stylesheetStatuses = await Promise.all(
+          stylesheetLinks.map(async (href) => {
+            try {
+              const response = await fetch(href, { cache: "no-store" });
+              return {
+                href,
+                ok: response.ok,
+                status: response.status
+              };
+            } catch (error) {
+              return {
+                href,
+                ok: false,
+                status: 0,
+                error: error.message
+              };
+            }
+          })
+        );
 
         return {
           href: window.location.href,
@@ -129,7 +152,9 @@ async function runSmokeAssertions(window) {
           hasTaskList,
           hasEngineHealth,
           hasSettingsGet,
-          settingsLoaded: Boolean(settings && typeof settings === "object")
+          settingsLoaded: Boolean(settings && typeof settings === "object"),
+          stylesheetLinks,
+          stylesheetStatuses
         };
       })();
     `,
@@ -150,6 +175,13 @@ async function runSmokeAssertions(window) {
 
   if (!details.hasSettingsGet || !details.settingsLoaded) {
     throw new Error("desktopApi.settings.get() did not return settings");
+  }
+
+  if (
+    !details.stylesheetLinks.length ||
+    details.stylesheetStatuses.some((item) => !item.ok)
+  ) {
+    throw new Error(`stylesheet assets are unavailable: ${JSON.stringify(details.stylesheetStatuses)}`);
   }
 }
 
