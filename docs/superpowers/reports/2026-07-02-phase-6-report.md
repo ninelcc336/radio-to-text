@@ -35,6 +35,31 @@ npm run sample
 - 文本导出成功
 - 任务日志完整落盘
 
+## 前端迁移补充
+
+- 桌面渲染层已新增 `app/desktop/web/`，采用 `Next.js App Router + TypeScript + Tailwind + shadcn/ui`
+- Electron 开发模式改为等待 `http://127.0.0.1:3000`，生产模式改为拉起 `Next standalone` 本地服务
+- `preload.js` 继续作为桌面能力边界，前端统一通过 `window.desktopApi` 访问任务、设置、导出和健康检查
+- 旧 `app/desktop/renderer/` 已降级为迁移说明页，只作为 Next 渲染层失效时的回退提示
+
+## 当前验证命令
+
+执行：
+
+```powershell
+npm run build:web
+npm run smoke
+npm run sample
+npm run build:engine:verify
+```
+
+说明：
+
+- `npm run build:web`：验证 Next 前端可生成生产 standalone 产物
+- `npm run smoke`：以生产模式拉起 Electron，并断言实际加载的是 Next 页面与 `desktopApi`
+- `npm run sample`：验证 Python 主链路仍可完成导入、转写、分人和导出
+- `npm run build:engine:verify`：校验 `engine.exe`、Next standalone `server.js` 与静态资源是否齐全
+
 ## 已知问题
 
 - 当前说话人区分采用启发式聚类，复杂会议场景下可能不稳定
