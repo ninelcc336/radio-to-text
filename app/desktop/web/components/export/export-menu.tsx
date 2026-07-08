@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileDown, FileJson2, UsersRound } from "lucide-react";
+import { Download, FileDown, FileJson2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getDesktopApi } from "@/lib/desktop-api";
 import type { DesktopTask } from "@/lib/desktop-types";
-import { getTaskText, useTaskDetailStore } from "@/stores/task-detail-store";
+import { getTaskText } from "@/stores/task-detail-store";
 
 type ExportMenuProps = {
   task: DesktopTask | null;
@@ -22,8 +22,6 @@ function getTaskFileStem(task: DesktopTask | null) {
 }
 
 export function ExportMenu({ task }: ExportMenuProps) {
-  const textVersion = useTaskDetailStore((state) => state.textVersion);
-
   async function saveText(
     content: string,
     defaultFileName: string,
@@ -51,27 +49,14 @@ export function ExportMenu({ task }: ExportMenuProps) {
           导出文本
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56 rounded-xl">
-        <DropdownMenuItem
-          disabled={!task}
-          onClick={() =>
-            void saveText(
-              getTaskText(task, textVersion),
-              `${taskStem}-${textVersion}.txt`,
-              [{ name: "Text", extensions: ["txt"] }]
-            )
-          }
-        >
-          <FileDown className="mr-2 h-4 w-4" />
-          导出当前视图
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={!task}
-          onClick={() =>
-            void saveText(
-              getTaskText(task, "clean"),
-              `${taskStem}-clean.txt`,
-              [{ name: "Text", extensions: ["txt"] }]
+        <DropdownMenuContent align="end" className="w-56 rounded-xl">
+          <DropdownMenuItem
+            disabled={!task}
+            onClick={() =>
+              void saveText(
+                getTaskText(task, "clean"),
+                `${taskStem}-clean.txt`,
+                [{ name: "Text", extensions: ["txt"] }]
             )
           }
         >
@@ -82,14 +67,14 @@ export function ExportMenu({ task }: ExportMenuProps) {
           disabled={!task}
           onClick={() =>
             void saveText(
-              getTaskText(task, "speaker"),
-              `${taskStem}-speaker.md`,
-              [{ name: "Markdown", extensions: ["md"] }]
+              getTaskText(task, "raw"),
+              `${taskStem}-raw.txt`,
+              [{ name: "Text", extensions: ["txt"] }]
             )
           }
         >
-          <UsersRound className="mr-2 h-4 w-4" />
-          导出说话人视图
+          <FileDown className="mr-2 h-4 w-4" />
+          导出原始文本
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

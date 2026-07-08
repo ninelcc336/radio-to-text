@@ -104,15 +104,6 @@ export function AppShell({ eyebrow, title, description, sidebar, children }: App
               </div>
             </div>
 
-            <div className="rounded-[1.4rem] border border-dashed border-border/80 bg-background/70 p-4">
-              <p className="text-[0.72rem] uppercase tracking-[0.3em] text-muted-foreground">
-                Workspace Note
-              </p>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                当前阶段只迁移列表页壳层与状态模块，处理、播放器、审校和导出仍留到后续任务。
-              </p>
-            </div>
-
             <div className="min-h-0 flex-1">{sidebar}</div>
           </CardContent>
         </Card>
@@ -128,12 +119,9 @@ export function AppShell({ eyebrow, title, description, sidebar, children }: App
                   className="mt-3 max-w-3xl text-4xl leading-tight text-foreground sm:text-5xl"
                   style={{ fontFamily: "\"Palatino Linotype\", Georgia, serif" }}
                 >
-                  本地任务像编辑部版面一样排开，导入后直接进入详情审校。
+                  转录工作台
                 </h1>
               </div>
-              <Badge className="rounded-full px-4 py-2 text-xs tracking-[0.22em]" variant="outline">
-                Electron + Next
-              </Badge>
             </div>
           </section>
 

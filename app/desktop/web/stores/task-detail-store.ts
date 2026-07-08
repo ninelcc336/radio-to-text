@@ -10,8 +10,8 @@ import type {
   ReviewAction
 } from "../lib/desktop-types";
 
-export type TaskTextVersion = "clean" | "raw" | "speaker" | "full";
-export type ReviewFilter = "all" | "needs-review" | "reviewed" | "pending";
+export type TaskTextVersion = "clean" | "raw";
+export type ReviewFilter = "all" | "needs-review";
 
 export type TaskSegmentView = {
   sourceIndex: number;
@@ -25,7 +25,6 @@ type TaskDetailStoreState = {
   isBusy: boolean;
   isSavingReview: boolean;
   error: string | null;
-  textVersion: TaskTextVersion;
   reviewFilter: ReviewFilter;
   bindApi(api: DesktopApi): void;
   loadTask(taskId: string): Promise<DesktopTask | null>;
@@ -36,7 +35,6 @@ type TaskDetailStoreState = {
     action: ReviewAction,
     reviewedText?: string
   ): Promise<DesktopTask | null>;
-  setTextVersion(textVersion: TaskTextVersion): void;
   setReviewFilter(reviewFilter: ReviewFilter): void;
 };
 
@@ -92,9 +90,17 @@ function getSegments(task: DesktopTask | null) {
   return task.results.segments;
 }
 
-function isReviewedSegment(segment: DesktopTaskSegment) {
+function isResolvedSegment(segment: DesktopTaskSegment) {
   const status = String(segment.review_status || "").toLowerCase();
-  return status === "confirmed" || status === "corrected" || status === "deleted";
+  return status === "confirmed" || status === "corrected";
+}
+
+function isDeletedSegment(segment: DesktopTaskSegment) {
+  return String(segment.review_status || "").toLowerCase() === "deleted";
+}
+
+function needsFocusedReview(segment: DesktopTaskSegment) {
+  return Boolean(segment.needs_review) && !isResolvedSegment(segment) && !isDeletedSegment(segment);
 }
 
 export function getTaskText(task: DesktopTask | null, textVersion: TaskTextVersion) {
@@ -104,14 +110,6 @@ export function getTaskText(task: DesktopTask | null, textVersion: TaskTextVersi
 
   if (textVersion === "raw") {
     return String(task.results.raw_plain_text || "");
-  }
-
-  if (textVersion === "speaker") {
-    return String(task.results.speaker_text || "");
-  }
-
-  if (textVersion === "full") {
-    return String(task.results.full_text || "");
   }
 
   return String(task.results.plain_text || "");
@@ -124,16 +122,12 @@ export function getVisibleSegments(task: DesktopTask | null, reviewFilter: Revie
       segment
     }))
     .filter(({ segment }) => {
+      if (isDeletedSegment(segment)) {
+        return false;
+      }
+
       if (reviewFilter === "needs-review") {
-        return Boolean(segment.needs_review);
-      }
-
-      if (reviewFilter === "reviewed") {
-        return isReviewedSegment(segment);
-      }
-
-      if (reviewFilter === "pending") {
-        return !isReviewedSegment(segment);
+        return needsFocusedReview(segment);
       }
 
       return true;
@@ -141,15 +135,12 @@ export function getVisibleSegments(task: DesktopTask | null, reviewFilter: Revie
 }
 
 export function getReviewStats(task: DesktopTask | null) {
-  const segments = getSegments(task);
-  const reviewed = segments.filter((segment) => isReviewedSegment(segment)).length;
-  const needsReview = segments.filter((segment) => Boolean(segment.needs_review)).length;
+  const segments = getSegments(task).filter((segment) => !isDeletedSegment(segment));
+  const needsReview = segments.filter((segment) => needsFocusedReview(segment)).length;
 
   return {
     total: segments.length,
-    reviewed,
-    needsReview,
-    pending: Math.max(segments.length - reviewed, 0)
+    needsReview
   };
 }
 
@@ -163,7 +154,6 @@ export function createTaskDetailStore(initialApi?: DesktopApi) {
     isBusy: false,
     isSavingReview: false,
     error: null,
-    textVersion: "clean",
     reviewFilter: "all",
     bindApi(api) {
       desktopApi = api;
@@ -176,7 +166,6 @@ export function createTaskDetailStore(initialApi?: DesktopApi) {
         const task = await desktopApi.tasks.get(taskId);
         set({
           task,
-          textVersion: "clean",
           reviewFilter: "all"
         });
         return task;
@@ -214,9 +203,6 @@ export function createTaskDetailStore(initialApi?: DesktopApi) {
       } finally {
         set({ isSavingReview: false });
       }
-    },
-    setTextVersion(textVersion) {
-      set({ textVersion });
     },
     setReviewFilter(reviewFilter) {
       set({ reviewFilter });

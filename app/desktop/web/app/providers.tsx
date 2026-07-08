@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect } from "react";
+import { DialogHost } from "@/components/ui/dialog-host";
 import { getDesktopApi } from "../lib/desktop-api";
 import { bindTasksStoreApi } from "../stores/tasks-store";
 
@@ -14,5 +15,10 @@ export function Providers({ children }: ProvidersProps) {
     bindTasksStoreApi(getDesktopApi());
   }, []);
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <DialogHost />
+    </>
+  );
 }

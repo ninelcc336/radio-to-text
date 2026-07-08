@@ -1,13 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import type { Route } from "next";
 import { useEffect } from "react";
-import { ArrowLeft } from "lucide-react";
+import { LoaderCircle, Play, RefreshCcw } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { AudioPlayerPanel } from "@/components/player/audio-player-panel";
 import { ExportMenu } from "@/components/export/export-menu";
-import { TaskActionBar } from "@/components/tasks/task-action-bar";
 import { TaskListPanel } from "@/components/tasks/task-list-panel";
 import { TaskSummaryCard } from "@/components/tasks/task-summary-card";
 import { TranscriptSegmentList } from "@/components/transcript/transcript-segment-list";
@@ -28,6 +25,18 @@ type TaskDetailPageProps = {
     taskId: string;
   };
 };
+
+function getProcessButtonLabel(taskStatus: string, isBusy: boolean) {
+  if (isBusy) {
+    return "处理中";
+  }
+
+  if (taskStatus.includes("completed") || taskStatus.includes("done") || taskStatus.includes("success")) {
+    return "重新处理";
+  }
+
+  return "开始处理";
+}
 
 function TaskDetailPageContent({ taskId }: { taskId: string }) {
   const apiReady = useTaskDetailStore((state) => state.apiReady);
@@ -74,28 +83,17 @@ function TaskDetailPageContent({ taskId }: { taskId: string }) {
     void refreshTasks();
   }, [refreshTasks, task, tasksApiReady]);
 
+  const taskStatus = String(task?.status || task?.stage || "").toLowerCase();
+  const hasCompletedOutput =
+    taskStatus.includes("completed") || taskStatus.includes("done") || taskStatus.includes("success");
+
   return (
     <AppShell
-      description="任务详情已经迁到 Next：在这里处理转写、播放源和逐段审校，仍然复用原有 Python 主链。"
+      description="音频文件转写为文本，并对转写结果进行审校，全流程本地端处理，数据零外泄风险。"
       eyebrow="Task Detail Deck"
       sidebar={<TaskListPanel />}
-      title="任务详情"
+      title="音频转写"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button
-          asChild
-          className="rounded-full"
-          variant="outline"
-          style={{ opacity: 0 }}
-        >
-          <Link href={"/" as Route}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            返回任务列表
-          </Link>
-        </Button>
-        <ExportMenu task={task} />
-      </div>
-
       {error ? (
         <Card className="rounded-[1.5rem] border-destructive/30 bg-destructive/10">
           <CardContent className="p-5 text-sm text-destructive">
@@ -104,20 +102,36 @@ function TaskDetailPageContent({ taskId }: { taskId: string }) {
         </Card>
       ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
         <div className="space-y-5">
-          <TaskActionBar
-            isBusy={isBusy}
-            onProcess={() => processTask(taskId)}
-            task={task}
-          />
           <AudioPlayerPanel taskId={taskId} />
-          <TranscriptToolbar />
           <TranscriptSegmentList taskId={taskId} />
         </div>
 
         <div className="space-y-5">
-          <TaskSummaryCard task={task} />
+          <TaskSummaryCard
+            actions={
+              <>
+                <Button
+                  className="rounded-full px-5"
+                  disabled={!task || isBusy}
+                  onClick={() => void processTask(taskId)}
+                >
+                  {isBusy ? (
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  ) : hasCompletedOutput ? (
+                    <RefreshCcw className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Play className="mr-2 h-4 w-4" />
+                  )}
+                  {getProcessButtonLabel(taskStatus, isBusy)}
+                </Button>
+                <ExportMenu task={task} />
+              </>
+            }
+            task={task}
+          />
+          <TranscriptToolbar />
           {isLoading && !task ? (
             <Card className="rounded-[1.6rem] border-border/70 bg-white/75">
               <CardContent className="p-5 text-sm text-muted-foreground">

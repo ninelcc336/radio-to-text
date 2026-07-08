@@ -16,6 +16,7 @@ import type { DesktopTask } from "@/lib/desktop-types";
 type TaskListItemProps = {
   task: DesktopTask;
   isActive: boolean;
+  isMutating?: boolean;
   onOpen(taskId: string): void;
   onRename(taskId: string): void;
   onDelete(taskId: string): void;
@@ -51,7 +52,14 @@ function getDetailLine(task: DesktopTask) {
   return [sourceName, segmentCount ? `${segmentCount} 段` : null].filter(Boolean).join(" · ");
 }
 
-export function TaskListItem({ task, isActive, onOpen, onRename, onDelete }: TaskListItemProps) {
+export function TaskListItem({
+  task,
+  isActive,
+  isMutating = false,
+  onOpen,
+  onRename,
+  onDelete
+}: TaskListItemProps) {
   const label = getTaskLabel(task);
   const statusLabel = task.status || task.stage || "未处理";
   const detailLine = getDetailLine(task);
@@ -87,17 +95,17 @@ export function TaskListItem({ task, isActive, onOpen, onRename, onDelete }: Tas
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button className="h-9 w-9 rounded-full" size="icon" variant="ghost">
+            <Button className="h-9 w-9 rounded-full" disabled={isMutating} size="icon" variant="ghost">
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-40 rounded-xl">
-            <DropdownMenuItem onClick={() => onRename(task.task_id)}>
+            <DropdownMenuItem disabled={isMutating} onClick={() => onRename(task.task_id)}>
               <PencilLine className="mr-2 h-4 w-4" />
               重命名
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive" onClick={() => onDelete(task.task_id)}>
+            <DropdownMenuItem className="text-destructive" disabled={isMutating} onClick={() => onDelete(task.task_id)}>
               <Trash2 className="mr-2 h-4 w-4" />
               删除任务
             </DropdownMenuItem>

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Check, PencilLine, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, LoaderCircle, PencilLine, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/components/ui/utils";
 import type { DesktopTaskSegment } from "@/lib/desktop-types";
+import { getDialogStore } from "@/stores/dialog-store";
 import { useTaskDetailStore } from "@/stores/task-detail-store";
 import { TranscriptSegmentEditor } from "./transcript-segment-editor";
 
@@ -28,18 +29,11 @@ function formatClock(seconds: unknown) {
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
-function getStatusLabel(segment: DesktopTaskSegment) {
-  const status = String(segment.review_status || "").toLowerCase();
-  if (status === "confirmed") {
-    return "已确认";
-  }
-  if (status === "corrected") {
-    return "已修正";
-  }
-  if (status === "deleted") {
-    return "已删除";
-  }
-  return segment.needs_review ? "待重点审校" : "待审";
+function shouldHighlightNeedsReview(segment: DesktopTaskSegment) {
+  return (
+    Boolean(segment.needs_review) &&
+    !["confirmed", "corrected", "deleted"].includes(String(segment.review_status || "").toLowerCase())
+  );
 }
 
 export function TranscriptSegmentCard({
@@ -52,18 +46,53 @@ export function TranscriptSegmentCard({
   const updateReview = useTaskDetailStore((state) => state.updateReview);
   const [isEditing, setIsEditing] = useState(false);
   const [draftText, setDraftText] = useState(String(segment.text || ""));
+  const [pendingAction, setPendingAction] = useState<"confirm" | "correct" | "delete" | null>(null);
+  const showNeedsReviewBadge = shouldHighlightNeedsReview(segment);
+
+  useEffect(() => {
+    setDraftText(String(segment.text || ""));
+  }, [segment.text]);
 
   async function handleConfirm() {
-    await updateReview(taskId, sourceIndex, "confirm");
+    if (!showNeedsReviewBadge) {
+      return;
+    }
+
+    setPendingAction("confirm");
+    try {
+      await updateReview(taskId, sourceIndex, "confirm");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function handleDelete() {
-    await updateReview(taskId, sourceIndex, "delete");
+    const confirmed = await getDialogStore().getState().openConfirm({
+      title: "删除片段",
+      description: "确认删除这个片段吗？删除后会从当前审校列表和导出文本中移除。",
+      confirmLabel: "确认删除",
+      tone: "destructive"
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    setPendingAction("delete");
+    try {
+      await updateReview(taskId, sourceIndex, "delete");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   async function handleSave() {
-    await updateReview(taskId, sourceIndex, "correct", draftText.trim());
-    setIsEditing(false);
+    setPendingAction("correct");
+    try {
+      await updateReview(taskId, sourceIndex, "correct", draftText.trim());
+      setIsEditing(false);
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   return (
@@ -78,9 +107,11 @@ export function TranscriptSegmentCard({
       <CardContent className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge className="rounded-full px-3 py-1 text-[0.72rem] tracking-[0.18em]" variant={segment.needs_review ? "destructive" : "outline"}>
-              {getStatusLabel(segment)}
-            </Badge>
+            {showNeedsReviewBadge ? (
+              <Badge className="rounded-full px-3 py-1 text-[0.72rem] tracking-[0.18em]" variant="destructive">
+                待重点审校
+              </Badge>
+            ) : null}
             <Badge className="rounded-full px-3 py-1 text-[0.72rem] tracking-[0.18em]" variant="outline">
               {formatClock(segment.start)} - {formatClock(segment.end)}
             </Badge>
@@ -120,10 +151,16 @@ export function TranscriptSegmentCard({
         ) : null}
 
         <div className="flex flex-wrap gap-2">
-          <Button className="rounded-full px-4" disabled={isSavingReview} onClick={() => void handleConfirm()} variant="outline">
-            <Check className="mr-2 h-4 w-4" />
-            确认
-          </Button>
+          {showNeedsReviewBadge ? (
+            <Button className="rounded-full px-4" disabled={isSavingReview} onClick={() => void handleConfirm()} variant="outline">
+              {pendingAction === "confirm" ? (
+                <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="mr-2 h-4 w-4" />
+              )}
+              {pendingAction === "confirm" ? "确认中" : "确认"}
+            </Button>
+          ) : null}
           <Button
             className="rounded-full px-4"
             disabled={isSavingReview}
@@ -134,8 +171,12 @@ export function TranscriptSegmentCard({
             {isEditing ? "收起编辑" : "修正文案"}
           </Button>
           <Button className="rounded-full px-4" disabled={isSavingReview} onClick={() => void handleDelete()} variant="destructive">
-            <Trash2 className="mr-2 h-4 w-4" />
-            删除片段
+            {pendingAction === "delete" ? (
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="mr-2 h-4 w-4" />
+            )}
+            {pendingAction === "delete" ? "删除中" : "删除片段"}
           </Button>
         </div>
       </CardContent>

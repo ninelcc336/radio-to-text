@@ -41,14 +41,20 @@ export function AudioPlayerPanel({ taskId }: AudioPlayerPanelProps) {
 
   const segments = Array.isArray(task?.results?.segments) ? task.results.segments : [];
   const activeSegment = activeSegmentIndex >= 0 ? segments[activeSegmentIndex] : null;
+  const sourcePath =
+    typeof task?.artifacts?.source_copy === "string"
+      ? task.artifacts.source_copy
+      : typeof task?.source_path === "string"
+        ? task.source_path
+        : undefined;
 
   useEffect(() => {
-    if (!apiReady) {
+    if (!apiReady || !task) {
       return;
     }
 
-    void loadAudio(taskId);
-  }, [apiReady, loadAudio, taskId]);
+    void loadAudio(taskId, sourcePath);
+  }, [apiReady, loadAudio, sourcePath, task, taskId]);
 
   useEffect(() => reset, [reset]);
 
@@ -85,7 +91,7 @@ export function AudioPlayerPanel({ taskId }: AudioPlayerPanelProps) {
               className="mt-2 text-2xl text-foreground"
               style={{ fontFamily: "\"Palatino Linotype\", Georgia, serif" }}
             >
-              原始音频回放
+              音频播放
             </CardTitle>
           </div>
           <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-4 py-2 text-xs tracking-[0.18em] text-muted-foreground">
@@ -101,6 +107,7 @@ export function AudioPlayerPanel({ taskId }: AudioPlayerPanelProps) {
             <audio
               className="w-full"
               controls
+              key={audio.url}
               onEnded={() => setPlaying(false)}
               onLoadedMetadata={(event) => {
                 setDuration(event.currentTarget.duration);
@@ -137,22 +144,6 @@ export function AudioPlayerPanel({ taskId }: AudioPlayerPanelProps) {
           <div className="text-sm text-muted-foreground">
             {formatClock(currentTime)} / {formatClock(duration)}
           </div>
-        </div>
-
-        <div
-          className={cn(
-            "rounded-[1.3rem] border p-4",
-            activeSegment
-              ? "border-primary/35 bg-primary/10"
-              : "border-border/70 bg-background/60"
-          )}
-        >
-          <p className="text-[0.72rem] uppercase tracking-[0.28em] text-muted-foreground">Active Segment</p>
-          <p className="mt-3 text-sm leading-7 text-foreground">
-            {activeSegment
-              ? activeSegment.text || "当前片段没有文本"
-              : "播放后会根据当前时间高亮对应的转写片段。"}
-          </p>
         </div>
       </CardContent>
     </Card>

@@ -3,12 +3,13 @@
 import type { Route } from "next";
 import { startTransition, useDeferredValue, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AudioLines, Plus, Search } from "lucide-react";
+import { AudioLines, LoaderCircle, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { getDialogStore } from "@/stores/dialog-store";
 import { TaskListItem } from "@/components/tasks/task-list-item";
 import type { DesktopTask } from "@/lib/desktop-types";
 import { useTasksStore } from "@/stores/tasks-store";
@@ -37,6 +38,7 @@ export function TaskListPanel() {
   const renameTask = useTasksStore((state) => state.renameTask);
   const deleteTask = useTasksStore((state) => state.deleteTask);
   const selectTask = useTasksStore((state) => state.selectTask);
+  const [mutatingTaskId, setMutatingTaskId] = useState<string | null>(null);
 
   const visibleTasks = tasks.filter((task) => matchesTask(task, deferredQuery));
 
@@ -60,22 +62,43 @@ export function TaskListPanel() {
 
   async function handleRenameTask(taskId: string) {
     const currentTask = tasks.find((item) => item.task_id === taskId);
-    const nextName = window.prompt("输入新的任务名称", currentTask?.name || currentTask?.task_id || "");
+    const nextName = await getDialogStore().getState().openPrompt({
+      title: "重命名任务",
+      description: "新的任务名称会立即写回本地任务清单。",
+      defaultValue: currentTask?.name || currentTask?.task_id || "",
+      placeholder: "输入新的任务名称",
+      confirmLabel: "保存名称"
+    });
     if (!nextName?.trim()) {
       return;
     }
 
-    await renameTask(taskId, nextName.trim());
+    setMutatingTaskId(taskId);
+    try {
+      await renameTask(taskId, nextName.trim());
+    } finally {
+      setMutatingTaskId(null);
+    }
   }
 
   async function handleDeleteTask(taskId: string) {
     const currentTask = tasks.find((item) => item.task_id === taskId);
-    const confirmed = window.confirm(`确认删除任务“${currentTask?.name || taskId}”吗？`);
+    const confirmed = await getDialogStore().getState().openConfirm({
+      title: "删除任务",
+      description: `确认删除任务“${currentTask?.name || taskId}”吗？任务目录和导出文件会一起移除。`,
+      confirmLabel: "确认删除",
+      tone: "destructive"
+    });
     if (!confirmed) {
       return;
     }
 
-    await deleteTask(taskId);
+    setMutatingTaskId(taskId);
+    try {
+      await deleteTask(taskId);
+    } finally {
+      setMutatingTaskId(null);
+    }
   }
 
   return (
@@ -92,8 +115,12 @@ export function TaskListPanel() {
             </CardTitle>
           </div>
           <Button className="rounded-full px-4" disabled={isImporting} onClick={() => void handleImportAudio()}>
-            <Plus className="mr-2 h-4 w-4" />
-            导入音频
+            {isImporting ? (
+              <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="mr-2 h-4 w-4" />
+            )}
+            {isImporting ? "导入中" : "导入音频"}
           </Button>
         </div>
 
@@ -134,6 +161,7 @@ export function TaskListPanel() {
               <TaskListItem
                 isActive={selectedTaskId === task.task_id}
                 key={task.task_id}
+                isMutating={mutatingTaskId === task.task_id}
                 onDelete={(taskId) => void handleDeleteTask(taskId)}
                 onOpen={handleOpenTask}
                 onRename={(taskId) => void handleRenameTask(taskId)}

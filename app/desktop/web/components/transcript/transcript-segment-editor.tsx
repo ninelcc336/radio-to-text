@@ -1,5 +1,6 @@
 "use client";
 
+import { LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -28,6 +29,7 @@ export function TranscriptSegmentEditor({
       />
       <div className="mt-3 flex flex-wrap gap-2">
         <Button className="rounded-full px-4" disabled={isSaving || !value.trim()} onClick={onSave}>
+          {isSaving ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
           {isSaving ? "保存中" : "保存修正"}
         </Button>
         <Button className="rounded-full px-4" disabled={isSaving} onClick={onCancel} variant="outline">

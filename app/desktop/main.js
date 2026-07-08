@@ -2,6 +2,7 @@ const path = require("path");
 const fs = require("fs/promises");
 const { pathToFileURL } = require("url");
 const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
+const appConfig = require("../shared/app-config.json");
 const { runEngineRequest } = require("./lib/python-engine");
 const { startNextServer, waitForUrl } = require("./lib/next-server");
 const {
@@ -190,6 +191,7 @@ async function createWindow() {
   const isDev = isDevelopmentMode();
   const { width, height } = getDefaultWindowSize();
   const window = new BrowserWindow({
+    title: appConfig.brandName,
     width,
     height,
     minWidth: MIN_WINDOW_WIDTH,
@@ -317,6 +319,7 @@ app.whenReady().then(async () => {
   // 选择音频文件也放在主进程做，避免渲染层直接接触 Node 能力。
   ipcMain.handle("dialog:select-audio", async () => {
     const result = await dialog.showOpenDialog({
+      title: appConfig.brandName,
       properties: ["openFile"],
       filters: [
         {
@@ -330,7 +333,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("dialog:save-text", async (_event, payload) => {
     const saveResult = await dialog.showSaveDialog({
-      title: payload?.title || "保存文件",
+      title: payload?.title || `${appConfig.brandName} · 保存文件`,
       defaultPath: payload?.defaultFileName || "transcript.txt",
       filters: payload?.filters || [
         {
