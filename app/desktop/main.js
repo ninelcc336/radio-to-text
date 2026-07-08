@@ -3,12 +3,17 @@ const fs = require("fs/promises");
 const { pathToFileURL } = require("url");
 const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
 const { runEngineRequest } = require("./lib/python-engine");
+const { startNextServer, waitForUrl } = require("./lib/next-server");
 const { ensureRuntimeDirs, getRuntimePaths } = require("./lib/runtime-paths");
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a"]);
 const DEFAULT_WINDOW_RATIO = 16 / 9;
 const MIN_WINDOW_WIDTH = 1280;
 const MIN_WINDOW_HEIGHT = Math.round(MIN_WINDOW_WIDTH / DEFAULT_WINDOW_RATIO);
+const DEFAULT_WEB_PORT = 3000;
+const DEFAULT_WEB_URL = `http://127.0.0.1:${DEFAULT_WEB_PORT}`;
+
+let activeWebServer = null;
 
 function isDevelopmentMode() {
   // 如果脚本显式传了 NODE_ENV，就优先按脚本意图判断。
@@ -20,8 +25,75 @@ function isDevelopmentMode() {
   return !app.isPackaged;
 }
 
+async function disposeActiveWebServer() {
+  if (!activeWebServer) {
+    return;
+  }
+
+  const server = activeWebServer;
+  activeWebServer = null;
+  await server.dispose();
+}
+
+function getLegacyRendererPath() {
+  return path.join(__dirname, "renderer", "index.html");
+}
+
+async function loadLegacyRenderer(window) {
+  await window.loadFile(getLegacyRendererPath());
+}
+
+async function findStandaloneWebDir() {
+  const candidates = [
+    path.join(process.resourcesPath, "web"),
+    path.join(__dirname, "web", ".next", "standalone")
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      await fs.access(path.join(candidate, "server.js"));
+      return candidate;
+    } catch (_error) {
+      // 当前候选不存在时继续尝试下一个。
+    }
+  }
+
+  return null;
+}
+
+async function loadRenderer(window) {
+  if (isDevelopmentMode()) {
+    const devUrl = process.env.RTT_WEB_URL || DEFAULT_WEB_URL;
+    try {
+      await waitForUrl(devUrl, 30000);
+      await window.loadURL(devUrl);
+      return;
+    } catch (error) {
+      console.warn(`[desktop] Next dev server unavailable, fallback to legacy renderer: ${error.message}`);
+    }
+  } else {
+    const standaloneDir = await findStandaloneWebDir();
+    if (standaloneDir) {
+      const port = Number(process.env.RTT_WEB_PORT) || DEFAULT_WEB_PORT;
+      try {
+        activeWebServer = await startNextServer({
+          cwd: standaloneDir,
+          port
+        });
+        await window.loadURL(activeWebServer.url);
+        return;
+      } catch (error) {
+        console.warn(`[desktop] Next standalone unavailable, fallback to legacy renderer: ${error.message}`);
+        await disposeActiveWebServer();
+      }
+    }
+  }
+
+  await loadLegacyRenderer(window);
+}
+
 // 主窗口只负责承载页面，业务处理统一走本地 Python 引擎。
-function createWindow() {
+async function createWindow() {
   const isDev = isDevelopmentMode();
   const { width, height } = getDefaultWindowSize();
   const window = new BrowserWindow({
@@ -42,7 +114,16 @@ function createWindow() {
     window.removeMenu();
   }
 
-  window.loadFile(path.join(__dirname, "renderer", "index.html"));
+  window.on("closed", () => {
+    setImmediate(() => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        void disposeActiveWebServer();
+      }
+    });
+  });
+
+  await loadRenderer(window);
+  return window;
 }
 
 function getDefaultWindowSize() {
@@ -126,7 +207,7 @@ async function resolveTaskAudioSource(payload, runtimePaths) {
   };
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const runtimePaths = getRuntimePaths({
     isPackaged: app.isPackaged,
     userDataDir: app.getPath("userData"),
@@ -177,14 +258,18 @@ app.whenReady().then(() => {
     return resolveTaskAudioSource(payload, runtimePaths);
   });
 
-  createWindow();
+  await createWindow();
 
   // macOS 上关闭窗口后保留应用，重新激活时再创建新窗口。
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      void createWindow();
     }
   });
+});
+
+app.on("before-quit", () => {
+  void disposeActiveWebServer();
 });
 
 app.on("window-all-closed", () => {
