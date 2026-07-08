@@ -6,6 +6,10 @@
   "main": "app/desktop/main.js",
   "scripts": {
     "dev": "set NODE_ENV=development&& .\\node_modules\\electron\\dist\\electron.exe .",
+    "dev:web": "npm --prefix app/desktop/web run dev",
+    "build:web": "npm --prefix app/desktop/web run build",
+    "start:web": "npm --prefix app/desktop/web run start",
+    "dev:desktop": "set NODE_ENV=development&& .\\node_modules\\electron\\dist\\electron.exe .",
     "start": "set NODE_ENV=production&& .\\node_modules\\electron\\dist\\electron.exe .",
     "smoke": "node app/desktop/scripts/smoke.js",
     "sample": "node app/desktop/scripts/process-sample.js tools/sample-meeting.wav",
@@ -15,7 +19,7 @@
     "build:engine": "python -m PyInstaller --noconfirm --clean --distpath dist-python --workpath build\\pyinstaller build\\windows\\engine.spec",
     "build:engine:verify": "node app/desktop/scripts/verify-engine-build.js",
     "dist:clean": "node app/desktop/scripts/clean-dist-output.js",
-    "dist:win": "npm run build:engine && npm run build:engine:verify && node app/desktop/scripts/clean-dist-output.js release/win-unpacked && electron-builder --config.directories.output=release --win nsis portable",
+    "dist:win": "npm run build:web && npm run build:engine && npm run build:engine:verify && node app/desktop/scripts/clean-dist-output.js release/win-unpacked && electron-builder --config.directories.output=release --win nsis portable",
     "dist:portable": "npm run build:engine && npm run build:engine:verify && npm run dist:clean && electron-builder --win portable"
   },
   "devDependencies": {
