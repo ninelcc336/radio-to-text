@@ -1,6 +1,10 @@
 node_modules/
 dist/
+nuild/
 release/
+release-debug/
+release-fixed3/
+release-offline-fixed4/
 dist-python/
 __pycache__/
 *.pyc
