@@ -12,5 +12,5 @@ tasks/*
 !tasks/.gitkeep
 logs/
 cache/
-build/pyinstaller/
+build/
 .next/
