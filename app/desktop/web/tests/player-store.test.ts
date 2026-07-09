@@ -30,3 +30,21 @@ test("loadAudio stores resolved source metadata", async () => {
   assert.equal(store.getState().audio?.url, "file:///demo.wav");
   assert.equal(store.getState().isLoading, false);
 });
+
+test("requestSeek updates time and token even when seeking to same timestamp", () => {
+  const store = createPlayerStore();
+
+  store.getState().requestSeek(12.5, 3);
+  const firstState = store.getState();
+
+  assert.equal(firstState.currentTime, 12.5);
+  assert.equal(firstState.activeSegmentIndex, 3);
+  assert.equal(firstState.seekTargetTime, 12.5);
+  assert.equal(firstState.seekRequestToken, 1);
+
+  store.getState().requestSeek(12.5, 3);
+  const secondState = store.getState();
+
+  assert.equal(secondState.seekRequestToken, 2);
+  assert.equal(secondState.seekTargetTime, 12.5);
+});

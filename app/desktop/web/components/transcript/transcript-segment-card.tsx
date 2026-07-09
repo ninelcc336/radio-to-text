@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type MouseEvent, useEffect, useState } from "react";
 import { Check, LoaderCircle, PencilLine, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/components/ui/utils";
 import type { DesktopTaskSegment } from "@/lib/desktop-types";
 import { getDialogStore } from "@/stores/dialog-store";
+import { usePlayerStore } from "@/stores/player-store";
 import { useTaskDetailStore } from "@/stores/task-detail-store";
 import { TranscriptSegmentEditor } from "./transcript-segment-editor";
 
@@ -44,10 +45,13 @@ export function TranscriptSegmentCard({
 }: TranscriptSegmentCardProps) {
   const isSavingReview = useTaskDetailStore((state) => state.isSavingReview);
   const updateReview = useTaskDetailStore((state) => state.updateReview);
+  const requestSeek = usePlayerStore((state) => state.requestSeek);
   const [isEditing, setIsEditing] = useState(false);
   const [draftText, setDraftText] = useState(String(segment.text || ""));
   const [pendingAction, setPendingAction] = useState<"confirm" | "correct" | "delete" | null>(null);
   const showNeedsReviewBadge = shouldHighlightNeedsReview(segment);
+  const segmentStart = Number(segment.start);
+  const segmentEnd = Number(segment.end);
 
   useEffect(() => {
     setDraftText(String(segment.text || ""));
@@ -95,10 +99,24 @@ export function TranscriptSegmentCard({
     }
   }
 
+  function handleSeek() {
+    requestSeek(segmentStart, sourceIndex);
+  }
+
+  function handleCardClick(event: MouseEvent<HTMLDivElement>) {
+    if ((event.target as HTMLElement).closest("[data-prevent-seek]")) {
+      return;
+    }
+
+    handleSeek();
+  }
+
   return (
     <Card
+      data-segment-index={sourceIndex}
+      onClick={handleCardClick}
       className={cn(
-        "rounded-[1.35rem] border transition-all",
+        "cursor-pointer rounded-[1.35rem] border transition-all",
         isActive
           ? "border-primary/45 bg-primary/10 shadow-[0_14px_30px_rgba(146,89,28,0.16)]"
           : "border-border/70 bg-background/70"
@@ -138,19 +156,21 @@ export function TranscriptSegmentCard({
         </div>
 
         {isEditing ? (
-          <TranscriptSegmentEditor
-            isSaving={isSavingReview}
-            onCancel={() => {
-              setDraftText(String(segment.text || ""));
-              setIsEditing(false);
-            }}
-            onChange={setDraftText}
-            onSave={() => void handleSave()}
-            value={draftText}
-          />
+          <div data-prevent-seek>
+            <TranscriptSegmentEditor
+              isSaving={isSavingReview}
+              onCancel={() => {
+                setDraftText(String(segment.text || ""));
+                setIsEditing(false);
+              }}
+              onChange={setDraftText}
+              onSave={() => void handleSave()}
+              value={draftText}
+            />
+          </div>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" data-prevent-seek>
           {showNeedsReviewBadge ? (
             <Button className="rounded-full px-4" disabled={isSavingReview} onClick={() => void handleConfirm()} variant="outline">
               {pendingAction === "confirm" ? (

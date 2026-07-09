@@ -20,6 +20,7 @@ type AppShellProps = {
   description: string;
   sidebar: ReactNode;
   children: ReactNode;
+  lockViewport?: boolean;
 };
 
 function NavigationLink({ href, label, icon, active }: NavigationItem) {
@@ -64,11 +65,33 @@ function NavigationLink({ href, label, icon, active }: NavigationItem) {
   );
 }
 
-export function AppShell({ eyebrow, title, description, sidebar, children }: AppShellProps) {
+export function AppShell({
+  eyebrow,
+  title,
+  description,
+  sidebar,
+  children,
+  lockViewport = false
+}: AppShellProps) {
   return (
-    <div className="min-h-screen px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[minmax(360px,400px)_minmax(0,1fr)]">
-        <Card className="overflow-hidden border-border/80 bg-white/70 shadow-[0_24px_80px_rgba(82,54,17,0.14)] backdrop-blur">
+    <div
+      className={cn(
+        "px-4 py-5 sm:px-6 lg:px-8",
+        lockViewport ? "h-screen overflow-hidden" : "min-h-screen"
+      )}
+    >
+      <div
+        className={cn(
+          "mx-auto grid max-w-7xl gap-5 lg:grid-cols-[minmax(360px,400px)_minmax(0,1fr)]",
+          lockViewport && "h-full min-h-0"
+        )}
+      >
+        <Card
+          className={cn(
+            "overflow-hidden border-border/80 bg-white/70 shadow-[0_24px_80px_rgba(82,54,17,0.14)] backdrop-blur",
+            lockViewport && "h-full min-h-0"
+          )}
+        >
           <CardContent className="flex h-full flex-col gap-6 p-5">
             <div className="rounded-[1.6rem] border border-border/70 bg-[linear-gradient(160deg,rgba(247,241,229,0.94),rgba(233,220,198,0.82))] p-5">
               <Badge
@@ -97,10 +120,10 @@ export function AppShell({ eyebrow, title, description, sidebar, children }: App
                   icon={<Home className="h-4 w-4" />}
                   label="任务列表"
                 />
-                <NavigationLink
+                {/* <NavigationLink
                   icon={<Settings2 className="h-4 w-4" />}
                   label="设置"
-                />
+                /> */}
               </div>
             </div>
 
@@ -108,8 +131,12 @@ export function AppShell({ eyebrow, title, description, sidebar, children }: App
           </CardContent>
         </Card>
 
-        <main className="space-y-5">
-          <section className="rounded-[2rem] border border-border/70 bg-[linear-gradient(155deg,rgba(255,255,255,0.85),rgba(243,233,216,0.74))] p-6 shadow-[0_18px_60px_rgba(75,48,16,0.12)]">
+        <main
+          className={cn(
+            lockViewport ? "flex h-full min-h-0 flex-col gap-5 overflow-hidden" : "space-y-5"
+          )}
+        >
+          <section className="shrink-0 rounded-[2rem] border border-border/70 bg-[linear-gradient(155deg,rgba(255,255,255,0.85),rgba(243,233,216,0.74))] p-6 shadow-[0_18px_60px_rgba(75,48,16,0.12)]">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-[0.74rem] uppercase tracking-[0.34em] text-muted-foreground">
@@ -125,7 +152,7 @@ export function AppShell({ eyebrow, title, description, sidebar, children }: App
             </div>
           </section>
 
-          {children}
+          {lockViewport ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div> : children}
         </main>
       </div>
     </div>

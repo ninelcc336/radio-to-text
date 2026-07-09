@@ -1,7 +1,9 @@
 const path = require("path");
+const nativeFs = require("fs");
 const fs = require("fs/promises");
 const { pathToFileURL } = require("url");
-const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
+const { Readable } = require("stream");
+const { app, BrowserWindow, dialog, ipcMain, protocol, screen } = require("electron");
 const appConfig = require("../shared/app-config.json");
 const { runEngineRequest } = require("./lib/python-engine");
 const { startNextServer, waitForUrl } = require("./lib/next-server");
@@ -18,8 +20,22 @@ const MIN_WINDOW_WIDTH = 1280;
 const MIN_WINDOW_HEIGHT = Math.round(MIN_WINDOW_WIDTH / DEFAULT_WINDOW_RATIO);
 const DEFAULT_WEB_PORT = 3000;
 const DEFAULT_WEB_URL = `http://127.0.0.1:${DEFAULT_WEB_PORT}`;
+const TASK_MEDIA_SCHEME = "rtt-media";
 
 let activeWebServer = null;
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: TASK_MEDIA_SCHEME,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true
+    }
+  }
+]);
 
 function isDevelopmentMode() {
   // 如果脚本显式传了 NODE_ENV，就优先按脚本意图判断。
@@ -242,6 +258,57 @@ function isPathInside(parentPath, childPath) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+function getAudioContentType(filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === ".mp3") {
+    return "audio/mpeg";
+  }
+  if (extension === ".m4a") {
+    return "audio/mp4";
+  }
+  return "audio/wav";
+}
+
+function parseRangeHeader(rangeHeader, fileSize) {
+  if (!rangeHeader || typeof rangeHeader !== "string") {
+    return null;
+  }
+
+  const match = /^bytes=(\d*)-(\d*)$/i.exec(rangeHeader.trim());
+  if (!match) {
+    return null;
+  }
+
+  const [, startRaw, endRaw] = match;
+  if (!startRaw && !endRaw) {
+    return null;
+  }
+
+  let start;
+  let end;
+
+  if (startRaw) {
+    start = Number.parseInt(startRaw, 10);
+    end = endRaw ? Number.parseInt(endRaw, 10) : fileSize - 1;
+  } else {
+    const suffixLength = Number.parseInt(endRaw, 10);
+    if (!Number.isFinite(suffixLength) || suffixLength <= 0) {
+      return null;
+    }
+    start = Math.max(fileSize - suffixLength, 0);
+    end = fileSize - 1;
+  }
+
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= fileSize) {
+    return null;
+  }
+
+  return {
+    start,
+    end: Math.min(end, fileSize - 1)
+  };
+}
+
 async function resolveTaskAudioSource(payload, runtimePaths) {
   const taskId = String(payload?.taskId || "").trim();
   if (!taskId) {
@@ -254,6 +321,7 @@ async function resolveTaskAudioSource(payload, runtimePaths) {
   const tasksDir = runtimePaths.tasksDir;
   const taskDir = path.join(tasksDir, taskId);
   const sourceDir = path.join(taskDir, "source");
+  const workingDir = path.join(taskDir, "working");
   const candidates = [];
   const preferredPath = payload?.sourcePath ? path.resolve(payload.sourcePath) : null;
 
@@ -264,12 +332,15 @@ async function resolveTaskAudioSource(payload, runtimePaths) {
     };
   }
 
-  if (preferredPath && isPathInside(taskDir, preferredPath)) {
-    candidates.push(preferredPath);
-  }
+  candidates.push(path.join(workingDir, "normalized_base.wav"));
+  candidates.push(path.join(workingDir, "normalized.wav"));
 
   for (const extension of SUPPORTED_AUDIO_EXTENSIONS) {
     candidates.push(path.join(sourceDir, `original${extension}`));
+  }
+
+  if (preferredPath && isPathInside(taskDir, preferredPath)) {
+    candidates.push(preferredPath);
   }
 
   for (const candidate of [...new Set(candidates)]) {
@@ -284,10 +355,15 @@ async function resolveTaskAudioSource(payload, runtimePaths) {
 
     try {
       await fs.access(resolved);
+      const relativePath = path
+        .relative(taskDir, resolved)
+        .split(path.sep)
+        .map(encodeURIComponent)
+        .join("/");
       return {
         available: true,
         path: resolved,
-        url: pathToFileURL(resolved).toString(),
+        url: `${TASK_MEDIA_SCHEME}://task/${encodeURIComponent(taskId)}/${relativePath}`,
         extension,
         fileName: path.basename(resolved)
       };
@@ -310,6 +386,61 @@ app.whenReady().then(async () => {
   });
   ensureRuntimeDirs(runtimePaths);
   const settingsStore = createSettingsStore(path.join(app.getPath("userData"), "settings.json"));
+
+  protocol.handle(TASK_MEDIA_SCHEME, async (request) => {
+    const requestUrl = new URL(request.url);
+    const [taskIdSegment, ...relativeSegments] = requestUrl.pathname.split("/").filter(Boolean);
+    const taskId = decodeURIComponent(taskIdSegment || "");
+
+    if (requestUrl.hostname !== "task" || !taskId || !relativeSegments.length) {
+      return new Response("Invalid media path", { status: 400 });
+    }
+
+    const taskDir = path.join(runtimePaths.tasksDir, taskId);
+    const targetPath = path.resolve(
+      taskDir,
+      ...relativeSegments.map((segment) => decodeURIComponent(segment))
+    );
+
+    if (!isPathInside(runtimePaths.tasksDir, taskDir) || !isPathInside(taskDir, targetPath)) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
+    try {
+      const fileStat = await fs.stat(targetPath);
+      const fileSize = fileStat.size;
+      const contentType = getAudioContentType(targetPath);
+      const rangeHeader = request.headers.get("range");
+      const byteRange = parseRangeHeader(rangeHeader, fileSize);
+
+      if (rangeHeader && !byteRange) {
+        return new Response(null, {
+          status: 416,
+          headers: {
+            "Accept-Ranges": "bytes",
+            "Content-Range": `bytes */${fileSize}`
+          }
+        });
+      }
+
+      const start = byteRange?.start ?? 0;
+      const end = byteRange?.end ?? fileSize - 1;
+      const chunkSize = end - start + 1;
+      const stream = nativeFs.createReadStream(targetPath, { start, end });
+
+      return new Response(Readable.toWeb(stream), {
+        status: byteRange ? 206 : 200,
+        headers: {
+          "Accept-Ranges": "bytes",
+          "Content-Length": String(chunkSize),
+          "Content-Type": contentType,
+          ...(byteRange ? { "Content-Range": `bytes ${start}-${end}/${fileSize}` } : {})
+        }
+      });
+    } catch (_error) {
+      return new Response("Not Found", { status: 404 });
+    }
+  });
 
   // 页面所有业务请求都通过一个统一 IPC 通道转发给 Python。
   ipcMain.handle("engine:request", async (_event, request) => {

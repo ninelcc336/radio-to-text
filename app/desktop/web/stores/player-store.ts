@@ -19,11 +19,15 @@ type PlayerStoreState = {
   currentTime: number;
   duration: number;
   activeSegmentIndex: number;
+  seekTargetTime: number | null;
+  seekRequestToken: number;
   error: string | null;
   bindApi(api: DesktopApi): void;
   loadAudio(taskId: string, sourcePath?: string): Promise<ResolvedTaskAudio>;
+  requestSeek(time: number, activeSegmentIndex?: number): void;
   syncPlayback(currentTime: number, segments: TimelineSegment[]): void;
   setDuration(duration: number): void;
+  setError(error: string | null): void;
   setPlaying(isPlaying: boolean): void;
   reset(): void;
 };
@@ -107,6 +111,8 @@ export function createPlayerStore(initialApi?: DesktopApi) {
     currentTime: 0,
     duration: 0,
     activeSegmentIndex: -1,
+    seekTargetTime: null,
+    seekRequestToken: 0,
     error: null,
     bindApi(api) {
       desktopApi = api;
@@ -120,6 +126,7 @@ export function createPlayerStore(initialApi?: DesktopApi) {
         currentTime: 0,
         duration: 0,
         activeSegmentIndex: -1,
+        seekTargetTime: null,
         isPlaying: false
       });
 
@@ -137,6 +144,15 @@ export function createPlayerStore(initialApi?: DesktopApi) {
         set({ isLoading: false });
       }
     },
+    requestSeek(time, activeSegmentIndex = -1) {
+      const safeTime = normalizeTime(time);
+      set((state) => ({
+        currentTime: safeTime,
+        activeSegmentIndex,
+        seekTargetTime: safeTime,
+        seekRequestToken: state.seekRequestToken + 1
+      }));
+    },
     syncPlayback(currentTime, segments) {
       const safeTime = normalizeTime(currentTime);
       set({
@@ -146,6 +162,9 @@ export function createPlayerStore(initialApi?: DesktopApi) {
     },
     setDuration(duration) {
       set({ duration: normalizeTime(duration) });
+    },
+    setError(error) {
+      set({ error });
     },
     setPlaying(isPlaying) {
       set({ isPlaying });
@@ -158,6 +177,8 @@ export function createPlayerStore(initialApi?: DesktopApi) {
         currentTime: 0,
         duration: 0,
         activeSegmentIndex: -1,
+        seekTargetTime: null,
+        seekRequestToken: 0,
         error: null
       });
     }

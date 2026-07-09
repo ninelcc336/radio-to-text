@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Filter, ListTree } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -23,6 +24,7 @@ const filterOptions: Array<{ value: ReviewFilter; label: string }> = [
 ];
 
 export function TranscriptSegmentList({ taskId }: TranscriptSegmentListProps) {
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const task = useTaskDetailStore((state) => state.task);
   const reviewFilter = useTaskDetailStore((state) => state.reviewFilter);
   const setReviewFilter = useTaskDetailStore((state) => state.setReviewFilter);
@@ -30,8 +32,43 @@ export function TranscriptSegmentList({ taskId }: TranscriptSegmentListProps) {
   const visibleSegments = getVisibleSegments(task, reviewFilter);
   const reviewStats = getReviewStats(task);
 
+  useEffect(() => {
+    if (activeSegmentIndex < 0 || !scrollRootRef.current) {
+      return;
+    }
+
+    const viewport = scrollRootRef.current.querySelector("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
+    const activeElement = scrollRootRef.current.querySelector(
+      `[data-segment-index="${activeSegmentIndex}"]`
+    ) as HTMLDivElement | null;
+
+    if (!viewport || !activeElement) {
+      return;
+    }
+
+    const viewportRect = viewport.getBoundingClientRect();
+    const activeRect = activeElement.getBoundingClientRect();
+    const topPadding = 20;
+    const bottomPadding = 28;
+
+    const isAbove = activeRect.top < viewportRect.top + topPadding;
+    const isBelow = activeRect.bottom > viewportRect.bottom - bottomPadding;
+
+    if (!isAbove && !isBelow) {
+      return;
+    }
+
+    const targetTop = activeElement.offsetTop - topPadding;
+    const targetBottom = activeElement.offsetTop + activeElement.offsetHeight - viewport.clientHeight + bottomPadding;
+
+    viewport.scrollTo({
+      top: isAbove ? Math.max(targetTop, 0) : Math.max(targetBottom, 0),
+      behavior: "smooth"
+    });
+  }, [activeSegmentIndex, visibleSegments]);
+
   return (
-    <Card className="rounded-[1.6rem] border-border/70 bg-white/75">
+    <Card className="flex h-full min-h-0 flex-col rounded-[1.6rem] border-border/70 bg-white/75">
       <CardHeader className="space-y-4 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -62,8 +99,8 @@ export function TranscriptSegmentList({ taskId }: TranscriptSegmentListProps) {
         </div>
       </CardHeader>
 
-      <CardContent className="min-h-0">
-        <ScrollArea className="h-[34rem] pr-3">
+      <CardContent className="flex min-h-0 flex-1 flex-col">
+        <ScrollArea className="h-full min-h-0 flex-1 pr-3" ref={scrollRootRef}>
           <div className="space-y-3">
             {visibleSegments.map(({ sourceIndex, segment }) => (
               <TranscriptSegmentCard

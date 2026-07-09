@@ -102,7 +102,7 @@ export function TaskListPanel() {
   }
 
   return (
-    <Card className="flex h-full min-h-[32rem] flex-col rounded-[1.6rem] border-border/70 bg-background/85">
+    <Card className="flex h-full min-h-0 flex-col rounded-[1.6rem] border-border/70 bg-background/85">
       <CardHeader className="space-y-4 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div>

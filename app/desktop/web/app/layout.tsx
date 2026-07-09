@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import { APP_BRAND_NAME } from "@/lib/app-config";
+import "react-h5-audio-player/lib/styles.css";
 import "./globals.css";
 
 export const metadata: Metadata = {

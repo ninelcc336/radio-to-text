@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import AudioPlayer, { RHAP_UI } from "react-h5-audio-player";
 import { Pause, Play, Rewind, FastForward, Volume2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/components/ui/utils";
 import { usePlayerStore } from "@/stores/player-store";
 import { useTaskDetailStore } from "@/stores/task-detail-store";
 
@@ -12,18 +11,8 @@ type AudioPlayerPanelProps = {
   taskId: string;
 };
 
-function formatClock(totalSeconds: number) {
-  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
-    return "00:00";
-  }
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
 export function AudioPlayerPanel({ taskId }: AudioPlayerPanelProps) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playerRef = useRef<AudioPlayer | null>(null);
   const task = useTaskDetailStore((state) => state.task);
   const apiReady = usePlayerStore((state) => state.apiReady);
   const audio = usePlayerStore((state) => state.audio);
@@ -32,10 +21,13 @@ export function AudioPlayerPanel({ taskId }: AudioPlayerPanelProps) {
   const currentTime = usePlayerStore((state) => state.currentTime);
   const duration = usePlayerStore((state) => state.duration);
   const activeSegmentIndex = usePlayerStore((state) => state.activeSegmentIndex);
+  const seekTargetTime = usePlayerStore((state) => state.seekTargetTime);
+  const seekRequestToken = usePlayerStore((state) => state.seekRequestToken);
   const error = usePlayerStore((state) => state.error);
   const loadAudio = usePlayerStore((state) => state.loadAudio);
   const syncPlayback = usePlayerStore((state) => state.syncPlayback);
   const setDuration = usePlayerStore((state) => state.setDuration);
+  const setError = usePlayerStore((state) => state.setError);
   const setPlaying = usePlayerStore((state) => state.setPlaying);
   const reset = usePlayerStore((state) => state.reset);
 
@@ -58,31 +50,27 @@ export function AudioPlayerPanel({ taskId }: AudioPlayerPanelProps) {
 
   useEffect(() => reset, [reset]);
 
-  function seekBy(offsetSeconds: number) {
-    if (!audioRef.current) {
+  useEffect(() => {
+    if (!seekRequestToken) {
       return;
     }
 
-    const nextTime = Math.max(audioRef.current.currentTime + offsetSeconds, 0);
-    audioRef.current.currentTime = nextTime;
+    const audioElement = playerRef.current?.audio.current;
+    if (!audioElement) {
+      return;
+    }
+
+    const nextTime = Math.min(
+      seekTargetTime ?? 0,
+      Number.isFinite(audioElement.duration) && audioElement.duration > 0 ? audioElement.duration : Number.POSITIVE_INFINITY
+    );
+
+    audioElement.currentTime = nextTime;
     syncPlayback(nextTime, segments);
-  }
-
-  function togglePlayback() {
-    if (!audioRef.current || !audio?.available) {
-      return;
-    }
-
-    if (audioRef.current.paused) {
-      void audioRef.current.play();
-      return;
-    }
-
-    audioRef.current.pause();
-  }
+  }, [seekRequestToken, seekTargetTime, segments, syncPlayback]);
 
   return (
-    <Card className="rounded-[1.6rem] border-border/70 bg-white/75">
+    <Card className="flex flex-col rounded-[1.6rem] border-border/70 bg-white/75">
       <CardHeader className="space-y-4 pb-4">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -101,23 +89,62 @@ export function AudioPlayerPanel({ taskId }: AudioPlayerPanelProps) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-5">
+      <CardContent className="flex flex-col gap-5">
         <div className="rounded-[1.3rem] border border-border/70 bg-background/65 p-4">
           {audio?.available && audio.url ? (
-            <audio
-              className="w-full"
-              controls
+            <AudioPlayer
+              autoPlayAfterSrcChange={false}
+              className="rtt-audio-player"
+              customControlsSection={[RHAP_UI.MAIN_CONTROLS]}
+              customIcons={{
+                play: <Play className="h-5 w-5" />,
+                pause: <Pause className="h-5 w-5" />,
+                rewind: <Rewind className="h-5 w-5" />,
+                forward: <FastForward className="h-5 w-5" />
+              }}
+              customProgressBarSection={[
+                RHAP_UI.CURRENT_TIME,
+                RHAP_UI.PROGRESS_BAR,
+                RHAP_UI.DURATION
+              ]}
+              customVolumeControls={[]}
+              defaultCurrentTime="00:00"
+              defaultDuration="00:00"
+              hasDefaultKeyBindings
               key={audio.url}
-              onEnded={() => setPlaying(false)}
-              onLoadedMetadata={(event) => {
-                setDuration(event.currentTarget.duration);
+              listenInterval={200}
+              onEnded={() => {
+                setPlaying(false);
+                syncPlayback(duration, segments);
+              }}
+              onError={() => {
+                setError("音频加载失败，请重新处理任务后再试。");
+              }}
+              onListen={(event) => {
+                const audioElement = event.target as HTMLAudioElement;
+                syncPlayback(audioElement.currentTime, segments);
+              }}
+              onLoadedMetaData={(event) => {
+                const audioElement = event.target as HTMLAudioElement;
+                setDuration(audioElement.duration);
+                syncPlayback(audioElement.currentTime, segments);
               }}
               onPause={() => setPlaying(false)}
               onPlay={() => setPlaying(true)}
-              onTimeUpdate={(event) => {
-                syncPlayback(event.currentTarget.currentTime, segments);
+              onPlayError={() => {
+                setError("音频播放失败，请重新处理任务后再试。");
               }}
-              ref={audioRef}
+              onSeeked={(event) => {
+                const audioElement = event.target as HTMLAudioElement;
+                syncPlayback(audioElement.currentTime, segments);
+              }}
+              preload="metadata"
+              progressJumpSteps={{ backward: 5000, forward: 5000 }}
+              ref={playerRef}
+              showDownloadProgress={false}
+              showFilledProgress
+              showFilledVolume={false}
+              showJumpControls
               src={audio.url}
             />
           ) : (
@@ -125,25 +152,6 @@ export function AudioPlayerPanel({ taskId }: AudioPlayerPanelProps) {
               {error || "当前任务还没有解析到可播放音频。"}
             </p>
           )}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Button className="rounded-full" disabled={!audio?.available} onClick={() => seekBy(-5)} size="icon" variant="outline">
-              <Rewind className="h-4 w-4" />
-            </Button>
-            <Button className="rounded-full px-5" disabled={!audio?.available} onClick={togglePlayback}>
-              {isPlaying ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
-              {isPlaying ? "暂停" : "播放"}
-            </Button>
-            <Button className="rounded-full" disabled={!audio?.available} onClick={() => seekBy(5)} size="icon" variant="outline">
-              <FastForward className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="text-sm text-muted-foreground">
-            {formatClock(currentTime)} / {formatClock(duration)}
-          </div>
         </div>
       </CardContent>
     </Card>

@@ -42,3 +42,58 @@
       linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(244, 241, 232, 0.96));
   }
 }
+
+.rtt-audio-player.rhap_container {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.rtt-audio-player .rhap_main {
+  gap: 1rem;
+}
+
+.rtt-audio-player .rhap_progress-section {
+  margin-bottom: 0.75rem;
+}
+
+.rtt-audio-player .rhap_progress-bar {
+  height: 0.45rem;
+  border-radius: 999px;
+  background-color: rgba(181, 160, 134, 0.32);
+}
+
+.rtt-audio-player .rhap_progress-filled {
+  border-radius: 999px;
+  background-color: hsl(var(--primary));
+}
+
+.rtt-audio-player .rhap_progress-indicator {
+  width: 1rem;
+  height: 1rem;
+  top: -0.28rem;
+  margin-left: -0.5rem;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  background: hsl(var(--primary));
+  box-shadow: 0 0 0 4px rgba(146, 89, 28, 0.15);
+}
+
+.rtt-audio-player .rhap_time {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.82rem;
+}
+
+.rtt-audio-player .rhap_main-controls-button,
+.rtt-audio-player .rhap_volume-button {
+  color: hsl(var(--foreground));
+}
+
+.rtt-audio-player .rhap_main-controls-button:hover,
+.rtt-audio-player .rhap_volume-button:hover {
+  color: hsl(var(--primary));
+}
+
+.rtt-audio-player .rhap_rewind-button,
+.rtt-audio-player .rhap_forward-button {
+  color: hsl(var(--muted-foreground));
+}

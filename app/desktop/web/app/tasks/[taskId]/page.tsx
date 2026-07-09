@@ -8,9 +8,9 @@ import { ExportMenu } from "@/components/export/export-menu";
 import { TaskListPanel } from "@/components/tasks/task-list-panel";
 import { TaskSummaryCard } from "@/components/tasks/task-summary-card";
 import { TranscriptSegmentList } from "@/components/transcript/transcript-segment-list";
-import { TranscriptToolbar } from "@/components/transcript/transcript-toolbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { isTaskCompleted } from "@/lib/task-status";
 import { Providers } from "../../providers";
 import { getDesktopApi } from "../../../lib/desktop-api";
 import { bindPlayerStoreApi } from "../../../stores/player-store";
@@ -84,61 +84,68 @@ function TaskDetailPageContent({ taskId }: { taskId: string }) {
   }, [refreshTasks, task, tasksApiReady]);
 
   const taskStatus = String(task?.status || task?.stage || "").toLowerCase();
-  const hasCompletedOutput =
-    taskStatus.includes("completed") || taskStatus.includes("done") || taskStatus.includes("success");
+  const hasCompletedOutput = isTaskCompleted(task);
 
   return (
     <AppShell
       description="音频文件转写为文本，并对转写结果进行审校，全流程本地端处理，数据零外泄风险。"
       eyebrow="Task Detail Deck"
+      lockViewport
       sidebar={<TaskListPanel />}
       title="音频转写"
     >
-      {error ? (
-        <Card className="rounded-[1.5rem] border-destructive/30 bg-destructive/10">
-          <CardContent className="p-5 text-sm text-destructive">
-            {error}
-          </CardContent>
-        </Card>
-      ) : null}
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
+        {error ? (
+          <Card className="shrink-0 rounded-[1.5rem] border-destructive/30 bg-destructive/10">
+            <CardContent className="p-5 text-sm text-destructive">
+              {error}
+            </CardContent>
+          </Card>
+        ) : null}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start">
-        <div className="space-y-5">
-          <AudioPlayerPanel taskId={taskId} />
-          <TranscriptSegmentList taskId={taskId} />
-        </div>
+        <div className="grid min-h-0 flex-1 gap-5 overflow-hidden xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-stretch">
+          <div className="flex min-h-0 flex-col gap-5 xl:h-full">
+            <div className="shrink-0">
+              <AudioPlayerPanel taskId={taskId} />
+            </div>
+            <div className="min-h-0 flex-1">
+              <TranscriptSegmentList taskId={taskId} />
+            </div>
+          </div>
 
-        <div className="space-y-5">
-          <TaskSummaryCard
-            actions={
-              <>
-                <Button
-                  className="rounded-full px-5"
-                  disabled={!task || isBusy}
-                  onClick={() => void processTask(taskId)}
-                >
-                  {isBusy ? (
-                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
-                  ) : hasCompletedOutput ? (
-                    <RefreshCcw className="mr-2 h-4 w-4" />
-                  ) : (
-                    <Play className="mr-2 h-4 w-4" />
-                  )}
-                  {getProcessButtonLabel(taskStatus, isBusy)}
-                </Button>
-                <ExportMenu task={task} />
-              </>
-            }
-            task={task}
-          />
-          <TranscriptToolbar />
-          {isLoading && !task ? (
-            <Card className="rounded-[1.6rem] border-border/70 bg-white/75">
-              <CardContent className="p-5 text-sm text-muted-foreground">
-                正在加载任务详情与可播放资源
-              </CardContent>
-            </Card>
-          ) : null}
+          <div className="flex min-h-0 flex-col gap-5 xl:h-full">
+            <div className="min-h-0 flex-1">
+              <TaskSummaryCard
+                actions={
+                  <>
+                    <Button
+                      className="rounded-full px-5"
+                      disabled={!task || isBusy}
+                      onClick={() => void processTask(taskId)}
+                    >
+                      {isBusy ? (
+                        <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                      ) : hasCompletedOutput ? (
+                        <RefreshCcw className="mr-2 h-4 w-4" />
+                      ) : (
+                        <Play className="mr-2 h-4 w-4" />
+                      )}
+                      {getProcessButtonLabel(taskStatus, isBusy)}
+                    </Button>
+                    <ExportMenu task={task} />
+                  </>
+                }
+                task={task}
+              />
+            </div>
+            {isLoading && !task ? (
+              <Card className="shrink-0 rounded-[1.6rem] border-border/70 bg-white/75">
+                <CardContent className="p-5 text-sm text-muted-foreground">
+                  正在加载任务详情与可播放资源
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
         </div>
       </div>
     </AppShell>
