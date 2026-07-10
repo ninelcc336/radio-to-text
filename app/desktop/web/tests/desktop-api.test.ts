@@ -22,16 +22,21 @@ test("desktop api maps task list call to preload bridge", async () => {
   });
 });
 
-test("desktop api returns null when audio selection is cancelled", async () => {
+test("desktop api maps import audio to main-process channel", async () => {
+  const calls: Array<{ channel: string; payload: unknown }> = [];
   const bridge: DesktopBridge = {
-    invoke<T>(channel: string) {
-      assert.equal(channel, "dialog:select-audio");
-      return Promise.resolve({ canceled: true, filePaths: [] } as T);
+    invoke<T>(channel: string, payload?: unknown) {
+      calls.push({ channel, payload });
+      return Promise.resolve({ task_id: "task-1" } as T);
     }
   };
 
   const api = createDesktopApi(bridge);
-  assert.equal(await api.tasks.importAudio(), null);
+  assert.deepEqual(await api.tasks.importAudio(), { task_id: "task-1" });
+  assert.deepEqual(calls[0], {
+    channel: "tasks:import-audio",
+    payload: undefined
+  });
 });
 
 test("getDesktopApi returns preload desktop api when available", () => {

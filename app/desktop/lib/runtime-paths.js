@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { loadDistributionManifest } = require("./distribution-manifest");
 
 function workspaceRoot() {
   return path.resolve(__dirname, "../../..");
@@ -39,6 +40,10 @@ function getWebRuntimePaths(options = {}) {
 
 function getRuntimePaths(options = {}) {
   const isPackaged = Boolean(options.isPackaged);
+  const distribution = loadDistributionManifest({
+    isPackaged,
+    resourcesPath: options.resourcesPath
+  });
   const defaultRootDir = isPackaged
     ? path.resolve(options.userDataDir || workspaceRoot())
     : workspaceRoot();
@@ -69,7 +74,11 @@ function getRuntimePaths(options = {}) {
     cacheRootDir,
     modelCacheDir,
     huggingfaceHomeDir,
-    engineEntry
+    engineEntry,
+    distributionVariant: distribution.variant,
+    bundledModelName: distribution.bundledModelName,
+    bundledModelDir: distribution.bundledModelDir,
+    bundledModelRequired: distribution.bundledModelRequired
   };
 }
 

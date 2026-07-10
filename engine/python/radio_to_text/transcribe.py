@@ -36,6 +36,16 @@ class Transcriber:
         return self._model
 
     def _resolve_model_path(self) -> Path:
+        bundled_model_dir = self.config.bundled_model_dir
+        if bundled_model_dir is not None:
+            return self._resolve_bundled_model_dir(bundled_model_dir)
+
+        if self.config.bundled_model_required:
+            variant = self.config.distribution_variant or "offline"
+            raise RuntimeError(
+                f"Bundled model is required for distribution '{variant}', but RTT_ASR_MODEL_DIR is not configured"
+            )
+
         configured = Path(self.config.model_name).expanduser()
         if configured.exists():
             return self._validate_model_dir(configured)
@@ -52,6 +62,17 @@ class Transcriber:
         )
         self._ensure_model_files(repo_id, managed_dir)
         return self._validate_model_dir(managed_dir)
+
+    def _resolve_bundled_model_dir(self, model_dir: Path) -> Path:
+        try:
+            return self._validate_model_dir(model_dir)
+        except RuntimeError as error:
+            if not self.config.bundled_model_required:
+                raise
+            variant = self.config.distribution_variant or "offline"
+            raise RuntimeError(
+                f"Bundled model is required for distribution '{variant}', but bundled model directory is unavailable: {error}"
+            ) from error
 
     def _try_resolve_snapshot_dir(self, repo_id: str) -> Path | None:
         repo_cache_dir = self.config.model_cache_dir / f"models--{repo_id.replace('/', '--')}"

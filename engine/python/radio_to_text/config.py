@@ -33,6 +33,9 @@ class EngineConfig:
     chunk_overlap_seconds: float
     sample_rate: int
     max_speakers: int
+    bundled_model_dir: Path | None = None
+    bundled_model_required: bool = False
+    distribution_variant: str = "lite"
 
 
 def resolve_path_env(name: str, default: Path) -> Path:
@@ -73,6 +76,13 @@ def resolve_optional_text_env(name: str, default: str | None = None) -> str | No
     return text
 
 
+def resolve_optional_path_env(name: str) -> Path | None:
+    value = resolve_optional_text_env(name)
+    if value is None:
+        return None
+    return Path(value).expanduser().resolve()
+
+
 def default_beam_size(accuracy_profile: str) -> int:
     profile = accuracy_profile.strip().lower()
     if profile in {"fast", "low"}:
@@ -91,6 +101,7 @@ def load_config() -> EngineConfig:
         "RTT_MODEL_CACHE_DIR", cache_root_dir / "models"
     )
     huggingface_home_dir = resolve_path_env("HF_HOME", cache_root_dir / "huggingface")
+    bundled_model_dir = resolve_optional_path_env("RTT_ASR_MODEL_DIR")
     term_replacements_path = resolve_path_env(
         "RTT_TERM_REPLACEMENTS_PATH", root_dir / "tools" / "term-replacements.json"
     )
@@ -122,6 +133,9 @@ def load_config() -> EngineConfig:
         cache_root_dir=cache_root_dir,
         model_cache_dir=model_cache_dir,
         huggingface_home_dir=huggingface_home_dir,
+        bundled_model_dir=bundled_model_dir,
+        bundled_model_required=resolve_bool_env("RTT_REQUIRE_BUNDLED_MODEL", False),
+        distribution_variant=os.getenv("RTT_DISTRIBUTION_VARIANT", "lite").strip() or "lite",
         term_replacements_path=term_replacements_path,
         audio_enhance_enabled=resolve_bool_env("RTT_AUDIO_ENHANCE_ENABLED", False),
         loudness_normalization_enabled=resolve_bool_env(

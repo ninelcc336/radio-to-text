@@ -58,8 +58,11 @@ async function startNextServer({ cwd, port, hostname = "127.0.0.1" }) {
   const child = spawn(process.execPath, [serverPath], {
     cwd,
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
     env: {
       ...process.env,
+      // 打包后 process.execPath 指向应用自身的 EXE，需要强制让 Electron 以 Node 模式执行 server.js。
+      ELECTRON_RUN_AS_NODE: "1",
       HOSTNAME: hostname,
       NEXT_TELEMETRY_DISABLED: "1",
       PORT: String(port)

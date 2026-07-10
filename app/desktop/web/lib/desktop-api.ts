@@ -133,19 +133,7 @@ export function createDesktopApi(bridge: DesktopBridge): DesktopApi {
         return unwrapEngineResponse(response, "无法加载任务详情").task || null;
       },
       async importAudio() {
-        const selected = await bridge.invoke<OpenDialogResult>("dialog:select-audio");
-        if (selected.canceled || !selected.filePaths?.length) {
-          return null;
-        }
-
-        const response = await bridge.invoke<EngineResponse<{ task: DesktopTask | null }>>(
-          "engine:request",
-          {
-            action: "import_audio",
-            payload: { sourcePath: selected.filePaths[0] }
-          }
-        );
-        return unwrapEngineResponse(response, "无法导入音频").task || null;
+        return bridge.invoke<DesktopTask | null>("tasks:import-audio");
       },
       async process(taskId) {
         const response = await bridge.invoke<EngineResponse<{ task: DesktopTask | null }>>(

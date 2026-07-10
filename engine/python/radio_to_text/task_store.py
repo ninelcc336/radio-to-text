@@ -60,16 +60,23 @@ class TaskStore:
         # task.json 是整个任务的单一事实来源，页面和导出都依赖它。
         task["name"] = normalize_task_name(task)
         task["updated_at"] = utc_now()
-        self.task_file(task["task_id"]).write_text(
-            json.dumps(task, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        sanitized_task = sanitize_json_value(task)
+        task.clear()
+        task.update(sanitized_task)
+
+        task_file = self.task_file(task["task_id"])
+        serialized = json.dumps(task, ensure_ascii=False, indent=2)
+        temp_file = task_file.with_suffix(".json.tmp")
+        temp_file.write_text(serialized, encoding="utf-8")
+        temp_file.replace(task_file)
 
     def load_task(self, task_id: str) -> dict[str, Any]:
         task_file = self.task_file(task_id)
         if not task_file.exists():
             raise FileNotFoundError(f"Task not found: {task_id}")
-        task = json.loads(task_file.read_text(encoding="utf-8"))
+        task = self._read_task_file(task_file)
+        if task is None:
+            raise FileNotFoundError(f"Task not found: {task_id}")
         task["name"] = normalize_task_name(task)
         return task
 
@@ -77,7 +84,9 @@ class TaskStore:
         tasks = []
         # 新任务排前面，桌面端刷新后可以直接看到最近处理结果。
         for task_file in sorted(self.config.tasks_dir.glob("*/task.json"), reverse=True):
-            task = json.loads(task_file.read_text(encoding="utf-8"))
+            task = self._read_task_file(task_file)
+            if task is None:
+                continue
             task["name"] = normalize_task_name(task)
             tasks.append(task)
         return tasks
@@ -139,6 +148,44 @@ class TaskStore:
 
         os.chmod(target_path, stat.S_IWRITE)
         func(target_path)
+
+    def _read_task_file(self, task_file: Path) -> dict[str, Any] | None:
+        try:
+            raw = task_file.read_text(encoding="utf-8")
+            if not raw.strip():
+                raise ValueError("task.json is empty")
+            task = json.loads(raw)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            self._purge_corrupt_task_dir(task_file.parent)
+            return None
+
+        if not isinstance(task, dict):
+            self._purge_corrupt_task_dir(task_file.parent)
+            return None
+
+        return sanitize_json_value(task)
+
+    def _purge_corrupt_task_dir(self, task_dir: Path) -> None:
+        if not task_dir.exists():
+            return
+        shutil.rmtree(task_dir, onerror=self._handle_remove_readonly)
+
+
+def sanitize_text(value: str) -> str:
+    return value.encode("utf-8", errors="replace").decode("utf-8")
+
+
+def sanitize_json_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return sanitize_text(value)
+    if isinstance(value, list):
+        return [sanitize_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            sanitize_text(str(key)): sanitize_json_value(item)
+            for key, item in value.items()
+        }
+    return value
 
 
 def datetime_id() -> str:

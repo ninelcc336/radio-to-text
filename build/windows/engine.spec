@@ -24,12 +24,7 @@ for package in [
     "faster_whisper",
     "huggingface_hub",
     "imageio_ffmpeg",
-    "librosa",
-    "llvmlite",
-    "numba",
     "numpy",
-    "scipy",
-    "sklearn",
     "soundfile",
     "tokenizers",
 ]:

@@ -121,6 +121,33 @@ class ProcessingPipelineReviewActionsTest(unittest.TestCase):
             "第二段保留内容。",
         )
 
+    def test_import_audio_preserves_original_metadata_when_source_is_staged(self) -> None:
+        pipeline = ProcessingPipeline(self.config)
+        staged_source = self.config.root_dir / "cache" / "import-staging" / "import-001.m4a"
+        staged_source.parent.mkdir(parents=True, exist_ok=True)
+        staged_source.write_bytes(b"fake-audio")
+
+        task = pipeline.import_audio(
+            str(staged_source),
+            original_source_path="C:/Users/Administrator/Desktop/音频素材/录音机-20260702-1559.m4a",
+            original_file_name="录音机-20260702-1559.m4a",
+        )
+
+        self.assertEqual(
+            task["source_path"],
+            "C:/Users/Administrator/Desktop/音频素材/录音机-20260702-1559.m4a",
+        )
+        self.assertEqual(
+            task["metadata"]["source_path"],
+            "C:/Users/Administrator/Desktop/音频素材/录音机-20260702-1559.m4a",
+        )
+        self.assertEqual(task["metadata"]["source_name"], "录音机-20260702-1559.m4a")
+        self.assertEqual(
+            task["metadata"]["import_source_path"],
+            str(staged_source),
+        )
+        self.assertTrue(Path(task["artifacts"]["source_copy"]).exists())
+
     def _create_mock_task(self) -> dict:
         task = self.pipeline.store.create_task("mock-meeting.wav")
         task["status"] = "completed"

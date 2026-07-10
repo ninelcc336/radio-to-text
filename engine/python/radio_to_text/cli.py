@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
+import traceback
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 
 from .config import load_config
@@ -30,13 +33,36 @@ def build_response(
 
 
 def read_request() -> dict[str, Any]:
-    raw = sys.stdin.read().strip()
+    request_file_path = os.environ.get("RTT_ENGINE_REQUEST_FILE", "").strip()
+    if request_file_path:
+        raw = Path(request_file_path).read_text(encoding="utf-8").strip()
+    else:
+        raw = sys.stdin.read().strip()
     if not raw:
         return {"action": "health", "payload": {}}
     request = json.loads(raw)
     if not isinstance(request, dict):
         raise ValueError("Request must be a JSON object")
     return request
+
+
+def write_response(response: EngineResponse) -> None:
+    payload = json.dumps(asdict(response), ensure_ascii=False)
+    response_file_path = os.environ.get("RTT_ENGINE_RESPONSE_FILE", "").strip()
+    if response_file_path:
+        Path(response_file_path).write_text(payload, encoding="utf-8")
+        return
+    sys.stdout.write(payload)
+
+
+def build_engine_error(exc: Exception) -> dict[str, Any]:
+    error = {
+        "code": "ENGINE_ERROR",
+        "message": str(exc),
+    }
+    if os.environ.get("RTT_INCLUDE_TRACEBACK", "").strip() == "1":
+        error["traceback"] = traceback.format_exc()
+    return error
 
 
 def handle_request(request: dict[str, Any]) -> EngineResponse:
@@ -104,7 +130,11 @@ def handle_request(request: dict[str, Any]) -> EngineResponse:
         from .pipeline import ProcessingPipeline
 
         pipeline = ProcessingPipeline(config)
-        task = pipeline.import_audio(payload["sourcePath"])
+        task = pipeline.import_audio(
+            payload["sourcePath"],
+            original_source_path=payload.get("originalSourcePath"),
+            original_file_name=payload.get("originalFileName"),
+        )
         return build_response(
             ok=True,
             status="completed",
@@ -276,11 +306,8 @@ def main() -> int:
             ok=False,
             status="failed",
             action="unknown",
-            error={
-                "code": "ENGINE_ERROR",
-                "message": str(exc),
-            },
+            error=build_engine_error(exc),
         )
 
-    sys.stdout.write(json.dumps(asdict(response), ensure_ascii=False))
+    write_response(response)
     return 0 if response.ok else 1

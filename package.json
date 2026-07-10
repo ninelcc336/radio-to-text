@@ -15,12 +15,14 @@
     "sample": "node app/desktop/scripts/process-sample.js tools/sample-meeting.wav",
     "model:consolidate": "node tools/migrate-model-cache.js",
     "engine:health": "python -X utf8 engine/python/main.py",
-    "build:engine:deps": "python -m pip install -r requirements-build.txt",
-    "build:engine": "python -m PyInstaller --noconfirm --clean --distpath dist-python --workpath build\\pyinstaller build\\windows\\engine.spec",
+    "build:engine:deps": "py -3.12 -m pip install -r requirements-build.txt",
+    "build:engine": "py -3.12 -m PyInstaller --noconfirm --clean --distpath dist-python --workpath build\\pyinstaller build\\windows\\engine.spec",
     "build:engine:verify": "node app/desktop/scripts/verify-engine-build.js",
     "dist:clean": "node app/desktop/scripts/clean-dist-output.js",
     "dist:win": "npm run build:web && npm run build:engine && npm run build:engine:verify && node app/desktop/scripts/clean-dist-output.js release/win-unpacked && electron-builder --config.directories.output=release --win nsis portable",
-    "dist:portable": "npm run build:web && npm run build:engine && npm run build:engine:verify && npm run dist:clean && electron-builder --win portable"
+    "dist:portable": "npm run build:web && npm run build:engine && npm run build:engine:verify && npm run dist:clean && electron-builder --win portable",
+    "dist:offline:small": "npm run build:web && npm run build:engine && npm run build:engine:verify && node app/desktop/scripts/build-distribution.js",
+    "dist:offline:small:verify": "node app/desktop/scripts/verify-offline-distribution.js"
   },
   "devDependencies": {
     "electron": "37.2.6",
@@ -46,7 +48,7 @@
         "to": "engine"
       },
       {
-        "from": "app/desktop/web/.next/standalone/app/desktop/web",
+        "from": "app/desktop/web/.next/standalone",
         "to": "web"
       },
       {

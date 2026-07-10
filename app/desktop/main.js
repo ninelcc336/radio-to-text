@@ -1,6 +1,7 @@
 const path = require("path");
 const nativeFs = require("fs");
 const fs = require("fs/promises");
+const crypto = require("crypto");
 const { pathToFileURL } = require("url");
 const { Readable } = require("stream");
 const { app, BrowserWindow, dialog, ipcMain, protocol, screen } = require("electron");
@@ -378,6 +379,61 @@ async function resolveTaskAudioSource(payload, runtimePaths) {
   };
 }
 
+async function selectAudioForImport() {
+  return dialog.showOpenDialog({
+    title: appConfig.brandName,
+    properties: ["openFile"],
+    filters: [
+      {
+        name: "Audio",
+        extensions: ["mp3", "wav", "m4a"]
+      }
+    ]
+  });
+}
+
+async function stageAudioForImport(sourcePath, runtimePaths) {
+  const sourceExtension = path.extname(sourcePath).toLowerCase();
+  const stagingDir = path.join(runtimePaths.cacheRootDir, "import-staging");
+  const stagedFilePath = path.join(
+    stagingDir,
+    `import-${Date.now()}-${crypto.randomUUID()}${sourceExtension}`
+  );
+
+  await fs.mkdir(stagingDir, { recursive: true });
+  await fs.copyFile(sourcePath, stagedFilePath);
+
+  return stagedFilePath;
+}
+
+async function importAudioTask(runtimePaths) {
+  const selection = await selectAudioForImport();
+  if (selection.canceled || !selection.filePaths?.length) {
+    return null;
+  }
+
+  const sourcePath = path.resolve(selection.filePaths[0]);
+  const stagedSourcePath = await stageAudioForImport(sourcePath, runtimePaths);
+
+  try {
+    const response = await runEngineRequest(
+      {
+        action: "import_audio",
+        payload: {
+          sourcePath: stagedSourcePath,
+          originalSourcePath: sourcePath,
+          originalFileName: path.basename(sourcePath)
+        }
+      },
+      { runtimePaths }
+    );
+
+    return response?.data?.task || null;
+  } finally {
+    await fs.rm(stagedSourcePath, { force: true }).catch(() => {});
+  }
+}
+
 app.whenReady().then(async () => {
   const runtimePaths = getRuntimePaths({
     isPackaged: app.isPackaged,
@@ -447,19 +503,13 @@ app.whenReady().then(async () => {
     return runEngineRequest(request, { runtimePaths });
   });
 
+  ipcMain.handle("tasks:import-audio", async () => {
+    return importAudioTask(runtimePaths);
+  });
+
   // 选择音频文件也放在主进程做，避免渲染层直接接触 Node 能力。
   ipcMain.handle("dialog:select-audio", async () => {
-    const result = await dialog.showOpenDialog({
-      title: appConfig.brandName,
-      properties: ["openFile"],
-      filters: [
-        {
-          name: "Audio",
-          extensions: ["mp3", "wav", "m4a"]
-        }
-      ]
-    });
-    return result;
+    return selectAudioForImport();
   });
 
   ipcMain.handle("dialog:save-text", async (_event, payload) => {

@@ -4,16 +4,18 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .audio import AudioProcessor
 from .config import EngineConfig
-from .diarize import SegmentDiarizer
 from .exporters import export_json, export_md, export_txt
-from .postprocess import TranscriptPostProcessor
 from .task_store import TaskStore
-from .transcribe import Transcriber
 from .utils import format_timestamp, utc_now
+
+if TYPE_CHECKING:
+    from .diarize import SegmentDiarizer
+    from .postprocess import TranscriptPostProcessor
+    from .transcribe import Transcriber
 
 
 class ProcessingPipeline:
@@ -22,20 +24,56 @@ class ProcessingPipeline:
         self.config = config
         self.store = TaskStore(config)
         self.audio = AudioProcessor(config)
-        self.transcriber = Transcriber(config)
-        self.postprocessor = TranscriptPostProcessor(config)
-        self.diarizer = SegmentDiarizer(config)
+        self._transcriber: Transcriber | None = None
+        self._postprocessor: TranscriptPostProcessor | None = None
+        self._diarizer: SegmentDiarizer | None = None
 
-    def import_audio(self, source_path: str) -> dict[str, Any]:
+    @property
+    def transcriber(self) -> "Transcriber":
+        if self._transcriber is None:
+            from .transcribe import Transcriber
+
+            self._transcriber = Transcriber(self.config)
+        return self._transcriber
+
+    @property
+    def postprocessor(self) -> "TranscriptPostProcessor":
+        if self._postprocessor is None:
+            from .postprocess import TranscriptPostProcessor
+
+            self._postprocessor = TranscriptPostProcessor(self.config)
+        return self._postprocessor
+
+    @property
+    def diarizer(self) -> "SegmentDiarizer":
+        if self._diarizer is None:
+            from .diarize import SegmentDiarizer
+
+            self._diarizer = SegmentDiarizer(self.config)
+        return self._diarizer
+
+    def import_audio(
+        self,
+        source_path: str,
+        *,
+        original_source_path: str | None = None,
+        original_file_name: str | None = None,
+    ) -> dict[str, Any]:
         # 导入阶段只做建任务和复制原始文件，不做重计算。
-        task = self.store.create_task(source_path)
-        source = Path(source_path)
-        source_copy = self.store.source_copy_path(task["task_id"], source.suffix.lower())
+        display_source_path = original_source_path or source_path
+        source_name = (original_file_name or "").strip() or Path(display_source_path).name
+        source_suffix = Path(source_name).suffix.lower() or Path(source_path).suffix.lower()
+
+        task = self.store.create_task(display_source_path)
+        source_copy = self.store.source_copy_path(task["task_id"], source_suffix)
         self.audio.copy_source(source_path, source_copy)
         task["stage"] = "imported"
         task["status"] = "ready"
-        task["metadata"]["original_file_name"] = source.name
-        task["metadata"]["original_extension"] = source.suffix.lower()
+        task["metadata"]["source_name"] = source_name
+        task["metadata"]["source_path"] = display_source_path
+        task["metadata"]["original_file_name"] = source_name
+        task["metadata"]["original_extension"] = source_suffix
+        task["metadata"]["import_source_path"] = source_path
         task["artifacts"]["source_copy"] = str(source_copy)
         self.store.append_log(task, "音频文件已导入任务目录。")
         self.store.save_task(task)

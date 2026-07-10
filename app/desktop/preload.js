@@ -34,15 +34,7 @@ contextBridge.exposeInMainWorld("desktopApi", {
       return unwrapEngineData(response)?.task || null;
     },
     async importAudio() {
-      const selection = await ipcRenderer.invoke("dialog:select-audio");
-      if (selection?.canceled || !selection?.filePaths?.length) {
-        return null;
-      }
-
-      const response = await invokeEngineAction("import_audio", {
-        sourcePath: selection.filePaths[0]
-      });
-      return unwrapEngineData(response)?.task || null;
+      return ipcRenderer.invoke("tasks:import-audio");
     },
     async process(taskId) {
       const response = await invokeEngineAction("process_task", { taskId });
