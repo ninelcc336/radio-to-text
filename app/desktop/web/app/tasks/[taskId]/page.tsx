@@ -10,6 +10,7 @@ import { TaskSummaryCard } from "@/components/tasks/task-summary-card";
 import { TranscriptSegmentList } from "@/components/transcript/transcript-segment-list";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { APP_BRAND_NAME } from "@/lib/app-config";
 import { isTaskCompleted } from "@/lib/task-status";
 import { Providers } from "../../providers";
 import { getDesktopApi } from "../../../lib/desktop-api";
@@ -92,7 +93,7 @@ function TaskDetailPageContent({ taskId }: { taskId: string }) {
       eyebrow="Task Detail Deck"
       lockViewport
       sidebar={<TaskListPanel />}
-      title="音频转写"
+      title={APP_BRAND_NAME}
     >
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
         {error ? (

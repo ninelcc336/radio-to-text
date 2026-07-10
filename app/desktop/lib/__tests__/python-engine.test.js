@@ -10,7 +10,7 @@ test("normalizeEngineRequest converts Windows path fields to forward slashes", (
     action: "import_audio",
     payload: {
       sourcePath: "C:\\Users\\Administrator\\Desktop\\sample-meeting.wav",
-      nestedDir: "C:\\Users\\Administrator\\AppData\\Roaming\\radio-to-text\\tasks",
+      nestedDir: "C:\\Users\\Administrator\\AppData\\Roaming\\音频转写助手\\tasks",
       taskId: "20260710-000000-abcd1234",
       note: "keep\\this\\string"
     }
@@ -22,7 +22,7 @@ test("normalizeEngineRequest converts Windows path fields to forward slashes", (
     action: "import_audio",
     payload: {
       sourcePath: "C:/Users/Administrator/Desktop/sample-meeting.wav",
-      nestedDir: "C:/Users/Administrator/AppData/Roaming/radio-to-text/tasks",
+      nestedDir: "C:/Users/Administrator/AppData/Roaming/音频转写助手/tasks",
       taskId: "20260710-000000-abcd1234",
       note: "keep\\this\\string"
     }

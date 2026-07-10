@@ -1,8 +1,8 @@
 {
-  "name": "radio-to-text-web",
+  "name": "audio-transcription-assistant-web",
   "version": "0.1.0",
   "private": true,
-  "description": "Next.js desktop renderer for radio-to-text",
+  "description": "Next.js desktop renderer for 音频转写助手",
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 3000",
     "build": "next build",

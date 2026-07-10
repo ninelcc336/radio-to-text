@@ -1,3 +1,6 @@
 {
-  "brandName": "音频转写"
+  "brandName": "音频转写助手",
+  "appId": "com.local.audio-transcription-assistant",
+  "appSlug": "audio-transcription-assistant",
+  "legacyUserDataDirName": "radio-to-text"
 }

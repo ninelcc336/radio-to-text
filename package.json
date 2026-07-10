@@ -1,8 +1,8 @@
 {
-  "name": "radio-to-text",
+  "name": "audio-transcription-assistant",
   "version": "0.1.0",
   "private": true,
-  "description": "Local-first meeting audio transcription desktop prototype",
+  "description": "Local-first desktop app for audio transcription",
   "main": "app/desktop/main.js",
   "scripts": {
     "dev": "set NODE_ENV=development&& .\\node_modules\\electron\\dist\\electron.exe .",
@@ -29,8 +29,8 @@
     "electron-builder": "^24.13.3"
   },
   "build": {
-    "appId": "com.local.radio-to-text",
-    "productName": "radio-to-text",
+    "appId": "com.local.audio-transcription-assistant",
+    "productName": "音频转写助手",
     "electronVersion": "37.2.6",
     "asar": true,
     "directories": {
@@ -57,6 +57,7 @@
       }
     ],
     "win": {
+      "icon": "build/icons/icon.ico",
       "target": [
         "nsis",
         "portable"
@@ -64,10 +65,14 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "audio-transcription-assistant-${version}-setup.${ext}",
+      "installerIcon": "build/icons/icon.ico",
+      "uninstallerIcon": "build/icons/icon.ico",
+      "installerHeaderIcon": "build/icons/icon.ico"
     },
     "portable": {
-      "artifactName": "${productName}-${version}-portable.${ext}"
+      "artifactName": "audio-transcription-assistant-${version}-portable.${ext}"
     }
   }
 }

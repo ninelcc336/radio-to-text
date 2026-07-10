@@ -8,6 +8,7 @@ const { app, BrowserWindow, dialog, ipcMain, protocol, screen } = require("elect
 const appConfig = require("../shared/app-config.json");
 const { runEngineRequest } = require("./lib/python-engine");
 const { startNextServer, waitForUrl } = require("./lib/next-server");
+const { migrateLegacyUserData } = require("./lib/user-data-migration");
 const {
   ensureRuntimeDirs,
   getRuntimePaths,
@@ -24,6 +25,11 @@ const DEFAULT_WEB_URL = `http://127.0.0.1:${DEFAULT_WEB_PORT}`;
 const TASK_MEDIA_SCHEME = "rtt-media";
 
 let activeWebServer = null;
+
+app.setName(appConfig.brandName);
+if (process.platform === "win32") {
+  app.setAppUserModelId(appConfig.appId);
+}
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -435,13 +441,21 @@ async function importAudioTask(runtimePaths) {
 }
 
 app.whenReady().then(async () => {
+  const userDataDir = app.getPath("userData");
+  await migrateLegacyUserData({
+    userDataDir,
+    legacyDirName: appConfig.legacyUserDataDirName,
+    targets: ["settings.json", "tasks", "logs", "cache"],
+    logger: (message) => console.info(message)
+  });
+
   const runtimePaths = getRuntimePaths({
     isPackaged: app.isPackaged,
-    userDataDir: app.getPath("userData"),
+    userDataDir,
     resourcesPath: process.resourcesPath
   });
   ensureRuntimeDirs(runtimePaths);
-  const settingsStore = createSettingsStore(path.join(app.getPath("userData"), "settings.json"));
+  const settingsStore = createSettingsStore(path.join(userDataDir, "settings.json"));
 
   protocol.handle(TASK_MEDIA_SCHEME, async (request) => {
     const requestUrl = new URL(request.url);

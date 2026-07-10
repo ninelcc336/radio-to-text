@@ -117,11 +117,11 @@ function createInstallerBuilderConfig(rootDir, outputDir) {
     },
     nsis: {
       ...((packageJson.build && packageJson.build.nsis) || {}),
-      artifactName: "${productName}-${version}-offline-small-installer.${ext}"
+      artifactName: "audio-transcription-assistant-${version}-offline-small-installer.${ext}"
     },
     portable: {
       ...((packageJson.build && packageJson.build.portable) || {}),
-      artifactName: "${productName}-${version}-offline-small-portable.${ext}"
+      artifactName: "audio-transcription-assistant-${version}-offline-small-portable.${ext}"
     }
   };
 }

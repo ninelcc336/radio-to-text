@@ -119,7 +119,7 @@ class Transcriber:
         request = Request(
             url,
             headers={
-                "User-Agent": "radio-to-text/0.1.0",
+                "User-Agent": "audio-transcription-assistant/0.1.0",
             },
         )
         try:
