@@ -133,7 +133,11 @@ class Transcriber:
             "powershell",
             "-NoProfile",
             "-Command",
-            "Invoke-WebRequest -UseBasicParsing -Uri $args[0] -OutFile $args[1]",
+            (
+                "& { param($Url, $OutFile) "
+                "Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $OutFile "
+                "}"
+            ),
             url,
             str(temp_path),
         ]

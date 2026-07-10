@@ -205,6 +205,25 @@ class ModelCachePathTests(unittest.TestCase):
                 normalize_path(snapshot_dir),
             )
 
+    def test_download_with_powershell_binds_url_and_output_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            url = "https://example.test/Systran/faster-whisper-small/model.bin"
+            temp_path = Path(temp_dir) / "model.bin.partial"
+            completed = types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+            with patch(
+                "radio_to_text.transcribe.subprocess.run",
+                return_value=completed,
+            ) as run:
+                Transcriber(object())._download_with_powershell(url, temp_path)
+
+            command = run.call_args.args[0]
+            self.assertEqual(command[:3], ["powershell", "-NoProfile", "-Command"])
+            self.assertIn("param($Url, $OutFile)", command[3])
+            self.assertNotIn("$args", command[3])
+            self.assertEqual(command[4], url)
+            self.assertEqual(command[5], str(temp_path))
+
 
 if __name__ == "__main__":
     unittest.main()
